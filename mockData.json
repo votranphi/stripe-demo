@@ -1,0 +1,35 @@
+{
+  "products": [
+    {
+      "id": "f1e6e674-383a-4f70-ba14-1988bc12d02e",
+      "name": "T-shirt",
+      "price": 1500
+    },
+    {
+      "id": "42895b8f-5f78-43ab-afe6-f635a139fd57",
+      "name": "Shorts",
+      "price": 500
+    },
+    {
+      "id": "4df98a60-706f-4b0e-af7b-500497afa6e5",
+      "name": "Bag",
+      "price": 2000
+    }
+  ],
+  "orders": [
+    {
+      "id": "518fd979-4e21-4336-8669-d67e9053942b",
+      "products": [
+        {
+          "id": "f1e6e674-383a-4f70-ba14-1988bc12d02e",
+          "quantity": 5
+        },
+        {
+          "id": "42895b8f-5f78-43ab-afe6-f635a139fd57",
+          "quantity": 1
+        }
+      ],
+      "status": "PAID"
+    }
+  ]
+}
