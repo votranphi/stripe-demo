@@ -16,7 +16,8 @@ export class ProductService {
       return products.map(product => ({
         id: product.id,
         name: product.name,
-        price: product.price
+        price: product.price,
+        stock: product.stock
       }));
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -33,7 +34,8 @@ export class ProductService {
       return {
         id: product.id,
         name: product.name,
-        price: product.price
+        price: product.price,
+        stock: product.stock
       };
     } catch (error) {
       console.error('Error fetching product:', error);
@@ -46,7 +48,8 @@ export class ProductService {
       const newProduct: ProductDocument = {
         id: crypto.randomUUID(),
         name: productData.name,
-        price: productData.price
+        price: productData.price,
+        stock: productData.stock
       };
 
       await this.collection.insertOne(newProduct);
@@ -54,7 +57,8 @@ export class ProductService {
       return {
         id: newProduct.id,
         name: newProduct.name,
-        price: newProduct.price
+        price: newProduct.price,
+        stock: newProduct.stock
       };
     } catch (error) {
       console.error('Error creating product:', error);
@@ -77,7 +81,8 @@ export class ProductService {
       return {
         id: result.id,
         name: result.name,
-        price: result.price
+        price: result.price,
+        stock: result.stock
       };
     } catch (error) {
       console.error('Error updating product:', error);

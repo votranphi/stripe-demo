@@ -65,9 +65,9 @@ export class ProductController {
 
   createProduct = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { name, price } = req.body;
+      const { name, price, stock } = req.body;
 
-      if (!name || typeof price !== 'number') {
+      if (!name || typeof price !== 'number' || typeof stock !== 'number') {
         res.status(400).json({
           success: false,
           message: 'Invalid product data'
@@ -75,7 +75,7 @@ export class ProductController {
         return;
       }
 
-      const product = await this.getProductService().createProduct({ name, price });
+      const product = await this.getProductService().createProduct({ name, price, stock });
 
       res.status(201).json({
         success: true,
@@ -102,11 +102,12 @@ export class ProductController {
         return;
       }
 
-      const { name, price } = req.body;
+      const { name, price, stock } = req.body;
 
-      const updateData: { name?: string; price?: number } = {};
+      const updateData: { name?: string; price?: number; stock?: number } = {};
       if (name) updateData.name = name;
       if (typeof price === 'number') updateData.price = price;
+      if (typeof stock === 'number') updateData.stock = stock;
 
       const product = await this.getProductService().updateProduct(id, updateData);
 
