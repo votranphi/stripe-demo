@@ -16,13 +16,23 @@ export class OrderService {
 
   async createOrder(products: OrderProduct[]): Promise<Order> {
     try {
-      // Validate products exist and have sufficient stock
+      // Validate products exist and have sufficient stock, then tentatively decrement stock
       for (const item of products) {
         const product = await this.productService.getProductById(item.id);
         if (!product) {
           throw new Error(`Product with id ${item.id} not found`);
         }
-        // TODO: Add stock checking when inventory field is added to Product model
+        if (product.stock < item.quantity) {
+          throw new Error(`Insufficient stock for product ${product.name}`);
+        }
+      }
+
+      // Tentatively decrement stock for each product
+      for (const item of products) {
+        const product = await this.productService.getProductById(item.id);
+        if (product) {
+          await this.productService.updateProduct(item.id, { stock: product.stock - item.quantity });
+        }
       }
 
       const newOrder: OrderDocument = {
