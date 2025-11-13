@@ -1,16 +1,32 @@
 {
   "name": "stripe-demo",
   "version": "2.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-
+  "description": "A Node.js/Express demo service for Stripe Checkout integration (Version 2)",
+  "homepage": "https://github.com/votranphi/stripe-demo#readme",
+  "bugs": {
+    "url": "https://github.com/votranphi/stripe-demo/issues"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/votranphi/stripe-demo.git"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "votranphi",
   "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
-
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "stripe": "^19.3.1",
+    "undici-types": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
   }
 }
