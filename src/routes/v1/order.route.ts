@@ -7,6 +7,5 @@ const orderController = new OrderController();
 router.post('/', orderController.createOrder);
 router.get('/success', orderController.checkoutSuccess);
 router.get('/cancel', orderController.checkoutCancel);
-router.get('/:id', orderController.getOrderById);
 
 export default router;

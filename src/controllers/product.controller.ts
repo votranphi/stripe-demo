@@ -29,42 +29,6 @@ export class ProductController {
     }
   };
 
-  // GET /api/v1/products/:id
-  getProductById = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          message: 'Product ID is required'
-        });
-        return;
-      }
-
-      const product = await this.getProductService().getProductById(id);
-
-      if (!product) {
-        res.status(404).json({
-          success: false,
-          message: 'Product not found'
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        data: product
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  };
-
   // POST /api/v1/products
   createProduct = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -83,85 +47,6 @@ export class ProductController {
       res.status(201).json({
         success: true,
         data: product
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  };
-
-  // PUT /api/v1/products/:id
-  updateProduct = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          message: 'Product ID is required'
-        });
-        return;
-      }
-
-      const { name, price, stock } = req.body;
-
-      const updateData: { name?: string; price?: number; stock?: number } = {};
-      if (name) updateData.name = name;
-      if (typeof price === 'number') updateData.price = price;
-      if (typeof stock === 'number') updateData.stock = stock;
-
-      const product = await this.getProductService().updateProduct(id, updateData);
-
-      if (!product) {
-        res.status(404).json({
-          success: false,
-          message: 'Product not found'
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        data: product
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  };
-
-  // DELETE /api/v1/products/:id
-  deleteProduct = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          message: 'Product ID is required'
-        });
-        return;
-      }
-
-      const deleted = await this.getProductService().deleteProduct(id);
-
-      if (!deleted) {
-        res.status(404).json({
-          success: false,
-          message: 'Product not found'
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        message: 'Product deleted successfully'
       });
     } catch (error) {
       res.status(500).json({

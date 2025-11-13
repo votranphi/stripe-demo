@@ -89,14 +89,4 @@ export class ProductService {
       throw new Error('Failed to update product');
     }
   }
-
-  async deleteProduct(id: string): Promise<boolean> {
-    try {
-      const result = await this.collection.deleteOne({ id });
-      return result.deletedCount > 0;
-    } catch (error) {
-      console.error('Error deleting product:', error);
-      throw new Error('Failed to delete product');
-    }
-  }
 }

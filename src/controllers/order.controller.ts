@@ -111,40 +111,4 @@ export class OrderController {
       }
     });
   };
-
-  // GET /api/v1/orders/:id
-  getOrderById = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          message: 'Order ID is required'
-        });
-        return;
-      }
-
-      const order = await this.getOrderService().getOrderById(id);
-
-      if (!order) {
-        res.status(404).json({
-          success: false,
-          message: 'Order not found'
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        data: order
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  };
 }
