@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { OrderService } from '../services/order.service.js';
-import { OrderProduct } from '../models/order.model.js';
+import { OrderProduct, OrderStatus } from '../models/order.model.js';
 
 export class OrderController {
   private orderService: OrderService | null = null;
@@ -75,7 +75,12 @@ export class OrderController {
 
       // Retrieve session and order info
       const { orderId, session } = await this.getOrderService().retrieveCheckoutSession(sessionId);
-      const order = await this.getOrderService().getOrderById(orderId);
+
+      // Update order status to PAID if payment is successful
+      let order = await this.getOrderService().getOrderById(orderId);
+      if (session.payment_status === 'paid' && order && order.status !== OrderStatus.PAID) {
+        order = await this.getOrderService().updateOrderStatus(orderId, OrderStatus.PAID);
+      }
 
       res.status(200).json({
         success: true,
