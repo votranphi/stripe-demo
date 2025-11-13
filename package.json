@@ -1,20 +1,16 @@
 {
   "name": "stripe-demo",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "",
-  "main": "./src/app.js",
+  "main": "index.js",
   "scripts": {
-    "start:dev": "node ./src/app.js"
+
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "express-validator": "^7.3.0",
-    "stripe": "^19.3.0",
-    "uuid": "^13.0.0"
+
   }
 }
