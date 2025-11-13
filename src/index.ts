@@ -1,11 +1,11 @@
-import express, { Express, Request, Response } from 'express';
+import express from 'express';
 import dotenv from 'dotenv';
 import Database from './config/database.js';
 import apiRoutes from './routes/index.js';
 
 dotenv.config();
 
-const app: Express = express();
+const app = express();
 const PORT = process.env.PORT;
 
 // Middleware
@@ -16,12 +16,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', apiRoutes);
 
 // Health check
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
 
 // 404 handler
-app.use((req: Request, res: Response) => {
+app.use((req, res) => {
   res.status(404).json({ 
     success: false, 
     message: 'Route not found' 
@@ -32,8 +32,8 @@ app.use((req: Request, res: Response) => {
 const startServer = async () => {
   try {
     // Connect to MongoDB
-    const database = Database.getInstance();
-    await database.connect();
+    const dbInstance = Database.getInstance();
+    await dbInstance.connect();
 
     // Start Express server
     app.listen(PORT, () => {
@@ -44,7 +44,7 @@ const startServer = async () => {
     // Graceful shutdown
     process.on('SIGINT', async () => {
       console.log('\nShutting down gracefully...');
-      await database.disconnect();
+      await dbInstance.disconnect();
       process.exit(0);
     });
 
