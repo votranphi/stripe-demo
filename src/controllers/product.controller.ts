@@ -2,15 +2,19 @@ import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service.js';
 
 export class ProductController {
-  private productService: ProductService;
+  private productService: ProductService | null = null;
 
-  constructor() {
-    this.productService = new ProductService();
+  // For lazy initialization
+  private getProductService(): ProductService {
+    if (!this.productService) {
+      this.productService = new ProductService();
+    }
+    return this.productService;
   }
 
   getAllProducts = async (req: Request, res: Response): Promise<void> => {
     try {
-      const products = await this.productService.getAllProducts();
+      const products = await this.getProductService().getAllProducts();
       res.status(200).json({
         success: true,
         data: products
@@ -36,7 +40,7 @@ export class ProductController {
         return;
       }
 
-      const product = await this.productService.getProductById(id);
+      const product = await this.getProductService().getProductById(id);
 
       if (!product) {
         res.status(404).json({
@@ -71,7 +75,7 @@ export class ProductController {
         return;
       }
 
-      const product = await this.productService.createProduct({ name, price });
+      const product = await this.getProductService().createProduct({ name, price });
 
       res.status(201).json({
         success: true,
@@ -104,7 +108,7 @@ export class ProductController {
       if (name) updateData.name = name;
       if (typeof price === 'number') updateData.price = price;
 
-      const product = await this.productService.updateProduct(id, updateData);
+      const product = await this.getProductService().updateProduct(id, updateData);
 
       if (!product) {
         res.status(404).json({
@@ -139,7 +143,7 @@ export class ProductController {
         return;
       }
 
-      const deleted = await this.productService.deleteProduct(id);
+      const deleted = await this.getProductService().deleteProduct(id);
 
       if (!deleted) {
         res.status(404).json({

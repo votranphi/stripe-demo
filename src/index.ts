@@ -6,7 +6,7 @@ import apiRoutes from './routes/index.js';
 dotenv.config();
 
 const app: Express = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 
 // Middleware
 app.use(express.json());
