@@ -12,6 +12,7 @@ export class ProductController {
     return this.productService;
   }
 
+  // GET /api/v1/products
   getAllProducts = async (req: Request, res: Response): Promise<void> => {
     try {
       const products = await this.getProductService().getAllProducts();
@@ -28,6 +29,7 @@ export class ProductController {
     }
   };
 
+  // GET /api/v1/products/:id
   getProductById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
@@ -63,6 +65,7 @@ export class ProductController {
     }
   };
 
+  // POST /api/v1/products
   createProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { name, price, stock } = req.body;
@@ -90,6 +93,7 @@ export class ProductController {
     }
   };
 
+  // PUT /api/v1/products/:id
   updateProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
@@ -132,6 +136,7 @@ export class ProductController {
     }
   };
 
+  // DELETE /api/v1/products/:id
   deleteProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
