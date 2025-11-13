@@ -27,6 +27,15 @@ export class ProductController {
   getProductById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'Product ID is required'
+        });
+        return;
+      }
+
       const product = await this.productService.getProductById(id);
 
       if (!product) {
@@ -80,6 +89,15 @@ export class ProductController {
   updateProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'Product ID is required'
+        });
+        return;
+      }
+
       const { name, price } = req.body;
 
       const updateData: { name?: string; price?: number } = {};
@@ -112,6 +130,15 @@ export class ProductController {
   deleteProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'Product ID is required'
+        });
+        return;
+      }
+
       const deleted = await this.productService.deleteProduct(id);
 
       if (!deleted) {
