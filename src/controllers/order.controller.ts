@@ -84,8 +84,7 @@ export class OrderController {
           orderId: orderId,
           paymentStatus: session.payment_status,
           order: order
-        },
-        warning: 'Order status will be updated by webhook. Do not rely on this endpoint for order fulfillment.'
+        }
       });
     } catch (error) {
       console.error('Error in checkoutSuccess:', error);

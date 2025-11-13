@@ -5,6 +5,6 @@ import orderRoutes from './order.route.js';
 const router = Router();
 
 router.use('/products', productRoutes);
-router.use('/order', orderRoutes);
+router.use('/orders', orderRoutes);
 
 export default router;
