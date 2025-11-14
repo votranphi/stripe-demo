@@ -1,4 +1,4 @@
-import { Collection, ClientSession } from 'mongodb';
+import { Collection } from 'mongodb';
 import Database from '../config/database.js';
 import { Order, OrderDocument, OrderStatus, OrderProduct } from '../models/order.model.js';
 import { ProductService } from './product.service.js';

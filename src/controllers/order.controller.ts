@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { OrderService } from '../services/order.service.js';
-import { OrderProduct, OrderStatus } from '../models/order.model.js';
+import { OrderStatus } from '../models/order.model.js';
 import { createOrderSchema } from '../validators/order.validator.js';
 
 export class OrderController {
