@@ -111,4 +111,19 @@ export class OrderController {
       }
     });
   };
+
+  // POST /api/v2/orders
+  createOrderV2 = async (req: Request, res: Response): Promise<void> => {
+
+  };
+
+  // GET /api/v2/orders/success?session_id=xxx
+  checkoutSuccessV2 = async (req: Request, res: Response): Promise<void> => {
+    
+  };
+
+  // GET /api/v2/orders/cancel
+  checkoutCancelV2 = async (req: Request, res: Response): Promise<void> => {
+    
+  };
 }

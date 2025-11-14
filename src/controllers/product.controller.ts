@@ -56,4 +56,14 @@ export class ProductController {
       });
     }
   };
+
+  // GET /api/v2/products
+  getAllProductsV2 = async (req: Request, res: Response): Promise<void> => {
+    
+  };
+
+  // POST /api/v2/products
+  createProductV2 = async (req: Request, res: Response): Promise<void> => {
+
+  };
 }
