@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import Database from './config/database.js';
 import apiRoutes from './routes/index.js';
+import { errorHandler } from './middlewares/error.middleware.js';
 
 dotenv.config();
 
@@ -18,10 +19,8 @@ app.use(express.urlencoded({ extended: true }));
 // API Routes
 app.use('/api', apiRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Server is running' });
-});
+// Middleware for error handler (avoid many try-catch terms in code)
+app.use(errorHandler);
 
 // 404 handler
 app.use((req, res) => {
