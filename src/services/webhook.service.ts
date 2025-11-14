@@ -1,16 +1,13 @@
 import { OrderService } from './order.service.js';
-import { ProductService } from './product.service.js';
 import stripe from '../config/stripe.js';
 import { OrderStatus } from '../models/order.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
 import Stripe from 'stripe';
 
 export class WebhookService {
-  private productService: ProductService;
   private orderService: OrderService;
 
   constructor() {
-    this.productService = new ProductService();
     this.orderService = new OrderService();
   }
 
