@@ -3,15 +3,28 @@ services:
     image: mongo:7-jammy
     container_name: stripe-demo-mongodb
     restart: always
-    command: "mongod --replSet rs0 --bind_ip_all & sleep 5 && mongosh --eval 'rs.initiate()'"
+
+    command: >
+      bash -c "
+        chmod 400 /data/keyfile &&
+        mongod --replSet rs0 --auth --keyFile /data/keyfile --bind_ip_all &
+        sleep 5 &&
+        mongosh <<EOF
+          rs.initiate();
+        EOF
+      "
+
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+
     ports:
       - "27018:27017"
+
     volumes:
       - mongodb_data:/data/db
+      - ./mongo-keyfile:/data/keyfile
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
 
 volumes:
   mongodb_data:
