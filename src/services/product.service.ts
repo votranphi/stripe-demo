@@ -1,4 +1,9 @@
 import { Product, ProductModel } from '../models/product.model.js';
+import {
+  DatabaseException,
+  ProductCreationException,
+  ProductUpdateException
+} from '../errors/CustomError.js';
 
 export class ProductService {
   async getAllProducts(): Promise<Product[]> {
@@ -11,8 +16,7 @@ export class ProductService {
         stock: product.stock
       }));
     } catch (error) {
-      console.error('Error fetching products:', error);
-      throw new Error('Failed to fetch products');
+      throw new DatabaseException('fetch products', error instanceof Error ? error : undefined);
     }
   }
 
@@ -29,8 +33,7 @@ export class ProductService {
         stock: product.stock
       };
     } catch (error) {
-      console.error('Error fetching product:', error);
-      throw new Error('Failed to fetch product');
+      throw new DatabaseException('fetch product', error instanceof Error ? error : undefined);
     }
   }
 
@@ -52,12 +55,17 @@ export class ProductService {
         stock: newProduct.stock
       };
     } catch (error) {
-      console.error('Error creating product:', error);
-      throw new Error('Failed to create product');
+      throw new ProductCreationException(
+        productData.name,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
-  async updateProduct(id: string, productData: Partial<Omit<Product, 'id'>>): Promise<Product | null> {
+  async updateProduct(
+    id: string,
+    productData: Partial<Omit<Product, 'id'>>
+  ): Promise<Product | null> {
     try {
       const result = await ProductModel.findOneAndUpdate(
         { id },
@@ -76,8 +84,7 @@ export class ProductService {
         stock: result.stock
       };
     } catch (error) {
-      console.error('Error updating product:', error);
-      throw new Error('Failed to update product');
+      throw new ProductUpdateException(id, error instanceof Error ? error : undefined);
     }
   }
 }
