@@ -3,6 +3,7 @@ services:
     image: mongo:7-jammy
     container_name: stripe-demo-mongodb
     restart: always
+    command: "mongod --replSet rs0 --bind_ip_all & sleep 5 && mongosh --eval 'rs.initiate()'"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
