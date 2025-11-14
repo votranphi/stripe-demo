@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service.js';
+import { createProductSchema } from '../validators/product.validator.js';
 
 export class ProductController {
   private productService: ProductService | null = null;
@@ -32,18 +33,18 @@ export class ProductController {
   // POST /api/v1/products
   createProduct = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { name, price, stock } = req.body;
-
-      if (!name || typeof price !== 'number' || typeof stock !== 'number') {
+      // Validate request body using Zod schema
+      const parseResult = createProductSchema.safeParse(req.body);
+      if (!parseResult.success) {
         res.status(400).json({
           success: false,
-          message: 'Invalid product data'
+          message: 'Invalid product data',
+          errors: parseResult.error.issues
         });
         return;
       }
-
+      const { name, price, stock } = parseResult.data;
       const product = await this.getProductService().createProduct({ name, price, stock });
-
       res.status(201).json({
         success: true,
         data: product

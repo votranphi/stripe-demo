@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { OrderService } from '../services/order.service.js';
 import { OrderProduct, OrderStatus } from '../models/order.model.js';
+import { createOrderSchema } from '../validators/order.validator.js';
 
 export class OrderController {
   private orderService: OrderService | null = null;
@@ -16,34 +17,21 @@ export class OrderController {
   // POST /api/v1/orders
   createOrder = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { products }: { products: OrderProduct[] } = req.body;
-
-      // Validate input
-      if (!products || !Array.isArray(products) || products.length === 0) {
+      // Validate request body using Zod schema
+      const parseResult = createOrderSchema.safeParse(req.body);
+      if (!parseResult.success) {
         res.status(400).json({
           success: false,
-          message: 'Products array is required and must not be empty'
+          message: 'Invalid order data',
+          errors: parseResult.error.issues
         });
         return;
       }
-
-      // Validate each product item
-      for (const item of products) {
-        if (!item.id || typeof item.quantity !== 'number' || item.quantity <= 0) {
-          res.status(400).json({
-            success: false,
-            message: 'Each product must have valid id and quantity > 0'
-          });
-          return;
-        }
-      }
-
+      const { products } = parseResult.data;
       // Create order with PENDING status
       const order = await this.getOrderService().createOrder(products);
-
       // Create Stripe Checkout Session
       const checkoutUrl = await this.getOrderService().createCheckoutSession(order.id, 'v1');
-
       res.status(201).json({
         success: true,
         data: {
@@ -116,34 +104,21 @@ export class OrderController {
   // POST /api/v2/orders
   createOrderV2 = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { products }: { products: OrderProduct[] } = req.body;
-
-      // Validate input
-      if (!products || !Array.isArray(products) || products.length === 0) {
+      // Validate request body using Zod schema
+      const parseResult = createOrderSchema.safeParse(req.body);
+      if (!parseResult.success) {
         res.status(400).json({
           success: false,
-          message: 'Products array is required and must not be empty'
+          message: 'Invalid order data',
+          errors: parseResult.error.issues
         });
         return;
       }
-
-      // Validate each product item
-      for (const item of products) {
-        if (!item.id || typeof item.quantity !== 'number' || item.quantity <= 0) {
-          res.status(400).json({
-            success: false,
-            message: 'Each product must have valid id and quantity > 0'
-          });
-          return;
-        }
-      }
-
+      const { products } = parseResult.data;
       // Create order with transaction support
       const order = await this.getOrderService().createOrderV2(products);
-
       // Create Stripe Checkout Session
       const checkoutUrl = await this.getOrderService().createCheckoutSession(order.id, 'v2');
-
       res.status(201).json({
         success: true,
         data: {
