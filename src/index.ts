@@ -8,6 +8,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT;
 
+// Webhook endpoint needs raw body for signature verification
+app.use('/api/v2/webhook', express.raw({ type: 'application/json' }));
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

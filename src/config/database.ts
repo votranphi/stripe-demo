@@ -46,6 +46,13 @@ class Database {
     return this.db;
   }
 
+  public getClient(): MongoClient {
+    if (!this.client) {
+      throw new Error('Database client not initialized. Call connect() first.');
+    }
+    return this.client;
+  }
+
   public async disconnect(): Promise<void> {
     if (this.client) {
       await this.client.close();

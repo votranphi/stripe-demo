@@ -5,6 +5,7 @@ import { OrderProduct, OrderStatus } from '../models/order.model.js';
 export class OrderController {
   private orderService: OrderService | null = null;
 
+  // For lazy initialization
   private getOrderService(): OrderService {
     if (!this.orderService) {
       this.orderService = new OrderService();
@@ -114,16 +115,98 @@ export class OrderController {
 
   // POST /api/v2/orders
   createOrderV2 = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { products }: { products: OrderProduct[] } = req.body;
 
+      // Validate input
+      if (!products || !Array.isArray(products) || products.length === 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Products array is required and must not be empty'
+        });
+        return;
+      }
+
+      // Validate each product item
+      for (const item of products) {
+        if (!item.id || typeof item.quantity !== 'number' || item.quantity <= 0) {
+          res.status(400).json({
+            success: false,
+            message: 'Each product must have valid id and quantity > 0'
+          });
+          return;
+        }
+      }
+
+      // Create order with transaction support
+      const order = await this.getOrderService().createOrderV2(products);
+
+      // Create Stripe Checkout Session
+      const checkoutUrl = await this.getOrderService().createCheckoutSessionV2(order.id);
+
+      res.status(201).json({
+        success: true,
+        data: {
+          order: order,
+          checkoutUrl: checkoutUrl
+        }
+      });
+    } catch (error) {
+      console.error('Error in createOrderV2:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create order',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   };
 
   // GET /api/v2/orders/success?session_id=xxx
   checkoutSuccessV2 = async (req: Request, res: Response): Promise<void> => {
-    
+    try {
+      const sessionId = req.query.session_id as string;
+
+      if (!sessionId) {
+        res.status(400).json({
+          success: false,
+          message: 'Missing session_id in query parameters'
+        });
+        return;
+      }
+
+      // Retrieve session and order info
+      const { orderId, session } = await this.getOrderService().retrieveCheckoutSession(sessionId);
+
+      // Get order info (DO NOT update status here - only webhook should do that)
+      const order = await this.getOrderService().getOrderById(orderId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Payment successful! Your order is being processed.',
+        data: {
+          orderId: orderId,
+          paymentStatus: session.payment_status,
+          order: order
+        }
+      });
+    } catch (error) {
+      console.error('Error in checkoutSuccessV2:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve checkout session',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   };
 
   // GET /api/v2/orders/cancel
   checkoutCancelV2 = async (req: Request, res: Response): Promise<void> => {
-    
+    res.status(200).json({
+      success: true,
+      message: 'Payment was canceled. You can retry the checkout anytime.',
+      data: {
+        redirectUrl: '/products'
+      }
+    });
   };
 }
