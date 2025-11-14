@@ -2,7 +2,14 @@ import Database from '../config/database.js';
 import { Order, OrderModel, OrderStatus, OrderProduct } from '../models/order.model.js';
 import { ProductService } from './product.service.js';
 import stripe from '../config/stripe.js';
-import { ProductNotFoundException, InsufficientStockException, OrderNotFoundException } from '../errors/CustomError.js';
+import {
+  ProductNotFoundException,
+  InsufficientStockException,
+  OrderNotFoundException,
+  DatabaseException,
+  CheckoutSessionException,
+  InvalidOrderStatusException
+} from '../errors/CustomError.js';
 
 export class OrderService {
   private productService: ProductService;
@@ -13,26 +20,13 @@ export class OrderService {
   }
 
   async createOrder(products: OrderProduct[]): Promise<Order> {
+    // Validate products exist and have sufficient stock
+    await this.validateProducts(products);
+
+    // Tentatively decrement stock for each product
+    await this.decrementProductStock(products);
+
     try {
-      // Validate products exist and have sufficient stock, then tentatively decrement stock
-      for (const item of products) {
-        const product = await this.productService.getProductById(item.id);
-        if (!product) {
-          throw new Error(`Product with id ${item.id} not found`);
-        }
-        if (product.stock < item.quantity) {
-          throw new Error(`Insufficient stock for product ${product.name}`);
-        }
-      }
-
-      // Tentatively decrement stock for each product
-      for (const item of products) {
-        const product = await this.productService.getProductById(item.id);
-        if (product) {
-          await this.productService.updateProduct(item.id, { stock: product.stock - item.quantity });
-        }
-      }
-
       const newOrder = new OrderModel({
         id: crypto.randomUUID(),
         products: products,
@@ -47,37 +41,23 @@ export class OrderService {
         status: newOrder.status
       };
     } catch (error) {
-      console.error('Error creating order:', error);
-      throw error;
+      throw new DatabaseException('create order', error instanceof Error ? error : undefined);
     }
   }
 
   // V2: Create order with database transactions
   async createOrderV2(products: OrderProduct[]): Promise<Order> {
     const session = await Database.getInstance().startSession();
-    
+
     try {
       let newOrder: Order | null = null;
 
       await session.withTransaction(async () => {
         // Validate products exist and have sufficient stock
-        for (const item of products) {
-          const product = await this.productService.getProductById(item.id);
-          if (!product) {
-            throw new ProductNotFoundException(item.id);
-          }
-          if (product.stock < item.quantity) {
-            throw new InsufficientStockException(product.name);
-          }
-        }
+        await this.validateProducts(products);
 
         // Decrement stock for each product
-        for (const item of products) {
-          const product = await this.productService.getProductById(item.id);
-          if (product) {
-            await this.productService.updateProduct(item.id, { stock: product.stock - item.quantity });
-          }
-        }
+        await this.decrementProductStock(products);
 
         // Create order
         const orderDoc = new OrderModel({
@@ -97,8 +77,11 @@ export class OrderService {
 
       return newOrder!;
     } catch (error) {
-      console.error('Error creating order with transaction:', error);
-      throw error;
+      // Re-throw custom errors as-is
+      if (error instanceof ProductNotFoundException || error instanceof InsufficientStockException) {
+        throw error;
+      }
+      throw new DatabaseException('create order with transaction', error instanceof Error ? error : undefined);
     } finally {
       await session.endSession();
     }
@@ -116,8 +99,7 @@ export class OrderService {
         status: order.status
       };
     } catch (error) {
-      console.error('Error fetching order:', error);
-      throw new Error('Failed to fetch order');
+      throw new DatabaseException('fetch order', error instanceof Error ? error : undefined);
     }
   }
 
@@ -139,46 +121,27 @@ export class OrderService {
         status: result.status
       };
     } catch (error) {
-      console.error('Error updating order status:', error);
-      throw new Error('Failed to update order status');
+      throw new DatabaseException('update order status', error instanceof Error ? error : undefined);
     }
   }
 
   async createCheckoutSession(orderId: string, version: 'v1' | 'v2' = 'v1'): Promise<string> {
+    const order = await this.getOrderById(orderId);
+    if (!order) {
+      throw new OrderNotFoundException(orderId);
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new InvalidOrderStatusException(order.status);
+    }
+
+    // Build line items for Stripe
+    const lineItems = await this.buildStripeLineItems(order.products);
+
+    const successUrl = `${process.env.BASE_URL}/api/${version}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/cancel`;
+
     try {
-      const order = await this.getOrderById(orderId);
-      if (!order) {
-        throw new OrderNotFoundException(orderId);
-      }
-
-      if (order.status !== OrderStatus.PENDING) {
-        throw new Error('Order is not in PENDING status');
-      }
-
-      // Build line items for Stripe
-      const lineItems = await Promise.all(
-        order.products.map(async (item) => {
-          const product = await this.productService.getProductById(item.id);
-          if (!product) {
-            throw new ProductNotFoundException(item.id);
-          }
-
-          return {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: product.name
-              },
-              unit_amount: product.price
-            },
-            quantity: item.quantity
-          };
-        })
-      );
-
-      const successUrl = `${process.env.BASE_URL}/api/${version}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/cancel`;
-
       // Create Stripe Checkout Session with order_id in metadata
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
@@ -191,25 +154,27 @@ export class OrderService {
         }
       });
 
-      return session.url!;
+      if (!session.url) {
+        throw new CheckoutSessionException('Stripe session URL is null');
+      }
+
+      return session.url;
     } catch (error) {
-      console.error('Error creating checkout session:', error);
-      if (
-        error instanceof OrderNotFoundException ||
-        error instanceof ProductNotFoundException
-      ) {
+      if (error instanceof CheckoutSessionException) {
         throw error;
       }
-      throw new Error('Failed to create checkout session');
+      throw new CheckoutSessionException(
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
     }
   }
 
   async retrieveCheckoutSession(sessionId: string): Promise<{ orderId: string; session: any }> {
     try {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      
+
       if (!session.metadata?.order_id) {
-        throw new Error('Order ID not found in session metadata');
+        throw new CheckoutSessionException('Order ID not found in session metadata');
       }
 
       return {
@@ -217,8 +182,12 @@ export class OrderService {
         session: session
       };
     } catch (error) {
-      console.error('Error retrieving checkout session:', error);
-      throw error;
+      if (error instanceof CheckoutSessionException) {
+        throw error;
+      }
+      throw new CheckoutSessionException(
+        error instanceof Error ? error.message : 'Failed to retrieve session'
+      );
     }
   }
 
@@ -233,7 +202,11 @@ export class OrderService {
   }
 
   // Update order status with retry logic
-  async updateOrderStatusWithRetry(orderId: string, status: OrderStatus, maxRetries: number = 3): Promise<Order | null> {
+  async updateOrderStatusWithRetry(
+    orderId: string,
+    status: OrderStatus,
+    maxRetries: number = 3
+  ): Promise<Order | null> {
     let attempt = 0;
     let lastError: Error | null = null;
 
@@ -244,14 +217,64 @@ export class OrderService {
         lastError = error instanceof Error ? error : new Error('Unknown error');
         attempt++;
         console.error(`Attempt ${attempt} failed for order ${orderId}:`, lastError.message);
-        
+
         if (attempt < maxRetries) {
           // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
         }
       }
     }
 
-    throw new Error(`Failed to update order status after ${maxRetries} attempts: ${lastError?.message}`);
+    throw new DatabaseException(
+      `update order status after ${maxRetries} attempts`,
+      lastError || undefined
+    );
+  }
+
+  // Private helper methods
+
+  private async validateProducts(products: OrderProduct[]): Promise<void> {
+    for (const item of products) {
+      const product = await this.productService.getProductById(item.id);
+      if (!product) {
+        throw new ProductNotFoundException(item.id);
+      }
+      if (product.stock < item.quantity) {
+        throw new InsufficientStockException(product.name);
+      }
+    }
+  }
+
+  private async decrementProductStock(products: OrderProduct[]): Promise<void> {
+    for (const item of products) {
+      const product = await this.productService.getProductById(item.id);
+      if (product) {
+        await this.productService.updateProduct(item.id, {
+          stock: product.stock - item.quantity
+        });
+      }
+    }
+  }
+
+  private async buildStripeLineItems(products: OrderProduct[]): Promise<any[]> {
+    return Promise.all(
+      products.map(async (item) => {
+        const product = await this.productService.getProductById(item.id);
+        if (!product) {
+          throw new ProductNotFoundException(item.id);
+        }
+
+        return {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: product.name
+            },
+            unit_amount: product.price
+          },
+          quantity: item.quantity
+        };
+      })
+    );
   }
 }
