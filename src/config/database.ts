@@ -17,14 +17,14 @@ class Database {
 
   public async connect(): Promise<void> {
     try {
-      const { MONGO_ADDRESS, MONGO_USERNAME, MONGO_PASSWORD, MONGO_DATABASE } = process.env;
+      const { MONGO_ADDRESS, MONGO_USERNAME, MONGO_PASSWORD, MONGO_POSTFIX } = process.env;
 
-      if (!MONGO_ADDRESS || !MONGO_USERNAME || !MONGO_PASSWORD || !MONGO_DATABASE) {
+      if (!MONGO_ADDRESS || !MONGO_USERNAME || !MONGO_PASSWORD || !MONGO_POSTFIX) {
         throw new Error('Missing MongoDB environment variables');
       }
 
-      const uri = `mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_ADDRESS}/${MONGO_DATABASE}`;
-      
+      const uri = `mongodb+srv://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_ADDRESS}/${MONGO_POSTFIX}`;
+
       await mongoose.connect(uri);
       
       console.log('Connected to MongoDB successfully');
