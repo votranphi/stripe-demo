@@ -42,7 +42,7 @@ export class OrderController {
       const order = await this.getOrderService().createOrder(products);
 
       // Create Stripe Checkout Session
-      const checkoutUrl = await this.getOrderService().createCheckoutSession(order.id);
+      const checkoutUrl = await this.getOrderService().createCheckoutSession(order.id, 'v1');
 
       res.status(201).json({
         success: true,
@@ -142,7 +142,7 @@ export class OrderController {
       const order = await this.getOrderService().createOrderV2(products);
 
       // Create Stripe Checkout Session
-      const checkoutUrl = await this.getOrderService().createCheckoutSessionV2(order.id);
+      const checkoutUrl = await this.getOrderService().createCheckoutSession(order.id, 'v2');
 
       res.status(201).json({
         success: true,
@@ -201,12 +201,6 @@ export class OrderController {
 
   // GET /api/v2/orders/cancel
   checkoutCancelV2 = async (req: Request, res: Response): Promise<void> => {
-    res.status(200).json({
-      success: true,
-      message: 'Payment was canceled. You can retry the checkout anytime.',
-      data: {
-        redirectUrl: '/products'
-      }
-    });
+    await this.checkoutCancel(req, res);
   };
 }

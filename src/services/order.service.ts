@@ -148,59 +148,7 @@ export class OrderService {
     }
   }
 
-  async createCheckoutSession(orderId: string): Promise<string> {
-    try {
-      const order = await this.getOrderById(orderId);
-      if (!order) {
-        throw new Error('Order not found');
-      }
-
-      if (order.status !== OrderStatus.PENDING) {
-        throw new Error('Order is not in PENDING status');
-      }
-
-      // Build line items for Stripe
-      const lineItems = await Promise.all(
-        order.products.map(async (item) => {
-          const product = await this.productService.getProductById(item.id);
-          if (!product) {
-            throw new Error(`Product with id ${item.id} not found`);
-          }
-
-          return {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: product.name
-              },
-              unit_amount: product.price
-            },
-            quantity: item.quantity
-          };
-        })
-      );
-
-      // Create Stripe Checkout Session with order_id in metadata
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: lineItems,
-        mode: 'payment',
-        success_url: `${process.env.BASE_URL}/api/v1/orders/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.BASE_URL}/api/v1/orders/cancel`,
-        metadata: {
-          order_id: orderId
-        }
-      });
-
-      return session.url!;
-    } catch (error) {
-      console.error('Error creating checkout session:', error);
-      throw error;
-    }
-  }
-
-  // V2: Create checkout session
-  async createCheckoutSessionV2(orderId: string): Promise<string> {
+  async createCheckoutSession(orderId: string, version: 'v1' | 'v2' = 'v1'): Promise<string> {
     try {
       const order = await this.getOrderById(orderId);
       if (!order) {
@@ -232,13 +180,16 @@ export class OrderService {
         })
       );
 
+      const successUrl = `${process.env.BASE_URL}/api/${version}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/cancel`;
+
       // Create Stripe Checkout Session with order_id in metadata
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: lineItems,
         mode: 'payment',
-        success_url: `${process.env.BASE_URL}/api/v2/orders/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.BASE_URL}/api/v2/orders/cancel`,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         metadata: {
           order_id: orderId
         }
@@ -247,7 +198,13 @@ export class OrderService {
       return session.url!;
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      throw error;
+      if (
+        error instanceof OrderNotFoundException ||
+        error instanceof ProductNotFoundException
+      ) {
+        throw error;
+      }
+      throw new Error('Failed to create checkout session');
     }
   }
 
