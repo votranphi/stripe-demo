@@ -1,18 +1,9 @@
-import { Collection } from 'mongodb';
-import Database from '../config/database.js';
-import { Product, ProductDocument } from '../models/product.model.js';
+import { Product, ProductModel } from '../models/product.model.js';
 
 export class ProductService {
-  private collection: Collection<ProductDocument>;
-
-  constructor() {
-    const db = Database.getInstance().getDb();
-    this.collection = db.collection<ProductDocument>('products');
-  }
-
   async getAllProducts(): Promise<Product[]> {
     try {
-      const products = await this.collection.find({}).toArray();
+      const products = await ProductModel.find({});
       return products.map(product => ({
         id: product.id,
         name: product.name,
@@ -27,7 +18,7 @@ export class ProductService {
 
   async getProductById(id: string): Promise<Product | null> {
     try {
-      const product = await this.collection.findOne({ id });
+      const product = await ProductModel.findOne({ id });
       if (!product) {
         return null;
       }
@@ -45,14 +36,14 @@ export class ProductService {
 
   async createProduct(productData: Omit<Product, 'id'>): Promise<Product> {
     try {
-      const newProduct: ProductDocument = {
+      const newProduct = new ProductModel({
         id: crypto.randomUUID(),
         name: productData.name,
         price: productData.price,
         stock: productData.stock
-      };
+      });
 
-      await this.collection.insertOne(newProduct);
+      await newProduct.save();
 
       return {
         id: newProduct.id,
@@ -68,10 +59,10 @@ export class ProductService {
 
   async updateProduct(id: string, productData: Partial<Omit<Product, 'id'>>): Promise<Product | null> {
     try {
-      const result = await this.collection.findOneAndUpdate(
+      const result = await ProductModel.findOneAndUpdate(
         { id },
         { $set: productData },
-        { returnDocument: 'after' }
+        { new: true }
       );
 
       if (!result) {

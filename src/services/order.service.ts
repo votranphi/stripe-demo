@@ -1,18 +1,14 @@
-import { Collection } from 'mongodb';
 import Database from '../config/database.js';
-import { Order, OrderDocument, OrderStatus, OrderProduct } from '../models/order.model.js';
+import { Order, OrderModel, OrderStatus, OrderProduct } from '../models/order.model.js';
 import { ProductService } from './product.service.js';
 import stripe from '../config/stripe.js';
 import { ProductNotFoundException, InsufficientStockException, OrderNotFoundException } from '../errors/CustomError.js';
 
 export class OrderService {
-  private collection: Collection<OrderDocument>;
   private productService: ProductService;
   private processedSessions: Set<string> = new Set();
 
   constructor() {
-    const db = Database.getInstance().getDb();
-    this.collection = db.collection<OrderDocument>('orders');
     this.productService = new ProductService();
   }
 
@@ -37,13 +33,13 @@ export class OrderService {
         }
       }
 
-      const newOrder: OrderDocument = {
+      const newOrder = new OrderModel({
         id: crypto.randomUUID(),
         products: products,
         status: OrderStatus.PENDING
-      };
+      });
 
-      await this.collection.insertOne(newOrder);
+      await newOrder.save();
 
       return {
         id: newOrder.id,
@@ -58,7 +54,7 @@ export class OrderService {
 
   // V2: Create order with database transactions
   async createOrderV2(products: OrderProduct[]): Promise<Order> {
-    const session = Database.getInstance().getClient().startSession();
+    const session = await Database.getInstance().startSession();
     
     try {
       let newOrder: Order | null = null;
@@ -84,13 +80,13 @@ export class OrderService {
         }
 
         // Create order
-        const orderDoc: OrderDocument = {
+        const orderDoc = new OrderModel({
           id: crypto.randomUUID(),
           products: products,
           status: OrderStatus.PENDING
-        };
+        });
 
-        await this.collection.insertOne(orderDoc, { session });
+        await orderDoc.save({ session });
 
         newOrder = {
           id: orderDoc.id,
@@ -110,7 +106,7 @@ export class OrderService {
 
   async getOrderById(id: string): Promise<Order | null> {
     try {
-      const order = await this.collection.findOne({ id });
+      const order = await OrderModel.findOne({ id });
       if (!order) {
         return null;
       }
@@ -127,10 +123,10 @@ export class OrderService {
 
   async updateOrderStatus(id: string, status: OrderStatus): Promise<Order | null> {
     try {
-      const result = await this.collection.findOneAndUpdate(
+      const result = await OrderModel.findOneAndUpdate(
         { id },
         { $set: { status } },
-        { returnDocument: 'after' }
+        { new: true }
       );
 
       if (!result) {

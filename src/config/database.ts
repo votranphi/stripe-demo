@@ -1,12 +1,10 @@
-import { MongoClient, Db } from 'mongodb';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 class Database {
   private static instance: Database;
-  private client: MongoClient | null = null;
-  private db: Db | null = null;
 
   private constructor() {}
 
@@ -25,12 +23,9 @@ class Database {
         throw new Error('Missing MongoDB environment variables');
       }
 
-      const uri = `mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_ADDRESS}`;
+      const uri = `mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_ADDRESS}/${MONGO_DATABASE}`;
       
-      this.client = new MongoClient(uri);
-      await this.client.connect();
-      
-      this.db = this.client.db(MONGO_DATABASE);
+      await mongoose.connect(uri);
       
       console.log('Connected to MongoDB successfully');
     } catch (error) {
@@ -39,25 +34,13 @@ class Database {
     }
   }
 
-  public getDb(): Db {
-    if (!this.db) {
-      throw new Error('Database not initialized. Call connect() first.');
-    }
-    return this.db;
-  }
-
-  public getClient(): MongoClient {
-    if (!this.client) {
-      throw new Error('Database client not initialized. Call connect() first.');
-    }
-    return this.client;
-  }
-
   public async disconnect(): Promise<void> {
-    if (this.client) {
-      await this.client.close();
-      console.log('Disconnected from MongoDB');
-    }
+    await mongoose.disconnect();
+    console.log('Disconnected from MongoDB');
+  }
+
+  public async startSession() {
+    return await mongoose.startSession();
   }
 }
 
