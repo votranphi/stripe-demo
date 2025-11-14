@@ -1,16 +1,17 @@
 # Stripe Demo Checkout Service
 
-This is a Node.js/Express demo service for Stripe Checkout integration. It supports creating orders, handling payments, and processing Stripe webhooks with idempotency and validation.
+This is a Node.js/Express (TypeScript) demo service for Stripe Checkout integration. It supports creating orders, handling payments, and processing Stripe webhooks with idempotency and validation.
 
 ## Features
-- Create new orders and Stripe Checkout sessions from a list of products
-- Store orders and products in a local JSON file (`mockData.json`)
+- Create new orders and Stripe Checkout sessions from a list of products in the Mongo database
+- Store orders and products in MongoDB.
 - Webhook endpoint to update order status after successful payment
-- Request validation using `express-validator`
+- Request validation using `Zod`
 
 ## Prerequisites
 - Node.js >= 22
 - npm
+- MongoDB account (for MongoDB connection)
 - Stripe account (for API keys)
 - Stripe CLI (for local webhook testing)
 
@@ -21,6 +22,11 @@ This is a Node.js/Express demo service for Stripe Checkout integration. It suppo
 2. Skip the account verification step.
 3. Navigate to **Developers > API keys** in the left sidebar.
 4. Copy the **Secret key** (starts with `sk_test_...`) and use it as `STRIPE_SECRET_KEY` in your `.env` file.
+
+## Create a MongoDB on MongoDB original website
+1. Go to [https://www.mongodb.com/products/platform/atlas-database](https://www.mongodb.com/products/platform/atlas-database) and sign up for a free account.
+3. Create a Project -> Create a Cluster -> Get the connection string.
+4. Change `.env` file to match with the database connection string.
 
 ---
 
@@ -41,15 +47,23 @@ npm install
 
 3. **Configure environment variables**
 
-Create a `.env` file in the project root with the following content:
-
+Create a `.env` file in the project root with the content look like the `.env.example`:
 ```
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+# NodeJS's secrets
 PORT=3000
+
+BASE_URL=http://localhost:3000
+
+STRIPE_SECRET_KEY=sk_test...
+
+STRIPE_WEBHOOK_SECRET=whsec_523d...
+
+# Database's secrets
+MONGO_ADDRESS=cluster0.0mbmrv7.mongodb.net
+MONGO_USERNAME=admin
+MONGO_PASSWORD=superlongpassword
+MONGO_POSTFIX=?appName=MySuperCluster
 ```
-- Get your `STRIPE_SECRET_KEY` from the Stripe Dashboard (Developers > API keys)
-- `STRIPE_WEBHOOK_SECRET` will be set up in the next step
 
 4. **Set up Stripe CLI for local webhook testing**
 
@@ -60,20 +74,21 @@ PORT=3000
 	```
 - Forward webhook events to your local server:
 	```bash
-	stripe listen --forward-to localhost:3000/api/v2/checkout/webhook
+	stripe listen --forward-to localhost:3000/api/v2/webhook
 	```
 - Copy the webhook signing secret (`whsec_...`) from the CLI output and put it in your `.env` as `STRIPE_WEBHOOK_SECRET`.
 
 5. **Run the service**
 
 ```bash
-npm run start:dev
+npm run start
+npm run build
 ```
 
 ## Usage
 
-### Create a Checkout Session
-Send a POST request to `/api/v2/checkout/create-session` with an example JSON body:
+### Create a new order
+Send a POST request to `/api/v2/orders` with an example JSON body:
 
 ```
 {
@@ -89,13 +104,19 @@ Send a POST request to `/api/v2/checkout/create-session` with an example JSON bo
     ]
 }
 ```
-- Product IDs must match those in `mockData.json`.
+- Product IDs must match those in MongoDB database.
 - The response will include a Stripe Checkout URL and the new order ID.
 
 ### Webhook Handling
-- The webhook endpoint `/api/v2/checkout/webhook` will update the order status to `PAID` after successful payment.
+- The webhook endpoint `/api/v2/webhook` will update the order status to `PAID` after successful payment.
 - Idempotency is ensured: each order is only marked as paid once, even if Stripe retries the webhook.
 
 ## Notes
-- All order and product data is stored in `mockData.json` (for demo only).
-- For production, use a real database and secure your endpoints.
+All order and product data is stored in MongoDB. You can POST new product to database using `/api/v2/products` with the following request body:
+```json
+{
+    "name": "Shorts",
+    "price": 100,
+    "stock": 10000
+}
+```
