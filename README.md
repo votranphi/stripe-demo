@@ -1,56 +1,122 @@
-# Day 1
-TypeScript Project Setup
-1. Initialize the Node.js project with TypeScript (tsconfig.json configuration). 
-2. Install necessary dependencies (express, stripe, dotenv, and TS type packages: @types/*). 
-3. Configure start and build scripts.
-4. Create the basic Express server using TS.
+# Stripe Demo Checkout Service
 
-Database (DB) Configuration
-1. Install DB (e.g., PostgreSQL/MongoDB) and an ORM/ODM tool (e.g., TypeORM or Mongoose). 
-2. Set up DB connection and configure .env for the connection string. 
-3. Build basic Order & Product Schemas/Models using TS.
+This is a Node.js/Express (TypeScript) demo service for Stripe Checkout integration. It supports creating orders, handling payments, and processing Stripe webhooks with idempotency and validation.
 
-Product Service & Route
-1. Build the Product Service (or Repository) to perform basic CRUD operations. 
-2. Implement the GET /products route to fetch the product list from the DB. 
-3. Use Async/Await and Promise in DB functions (ensuring type safety).
+## Features
+- Create new orders and Stripe Checkout sessions from a list of products in the Mongo database
+- Store orders and products in MongoDB.
+- Webhook endpoint to update order status after successful payment
+- Request validation using `Zod`
 
-Order Creation & Checkout Session
-1. Build the POST /orders route to create an Order with PENDING status in the DB. 
-2. Check inventory (DB) and tentatively decrement stock. 
-3. Call stripe.checkout.sessions.create() and return the session.url. 
-4. Ensure Type Annotations are used for input data.
+## Prerequisites
+- Node.js >= 22
+- npm
+- MongoDB account (for MongoDB connection)
+- Stripe account (for API keys)
+- Stripe CLI (for local webhook testing)
 
-Redirect Handling & Cleanup
-1. Create /success and /cancel routes. 
-2. In /success, use stripe.checkout.sessions.retrieve() to fetch the order ID (from metadata). 
-3. Note: Discuss why this route should not be used to change the Order status (security/reliability). 
-4. Refactor code into distinct Controller and Service classes.
 
-# Day 2
-Webhook Handler Setup (TS)
-1. Set up the Stripe CLI to forward events. 
-2. Create the POST /webhook endpoint. 
-3. Define type-safe interfaces for critical Stripe events (e.g., Stripe.Checkout.Session interface).
+## Create a Stripe Developer Account & Get API Keys
 
-Webhook Security & Fulfillment
-1. Implement Stripe Signature Verification (stripe.webhooks.constructEvent()). 
-2. Inside the checkout.session.completed event: 
-- Check for Idempotency (prevent duplicate processing).
-- Use the Order ID from session metadata to find the Order in the DB. 
-- Update the Order status to PAID in the DB.
+1. Go to [https://dashboard.stripe.com/register](https://dashboard.stripe.com/register) and sign up for a free Stripe account.
+2. Skip the account verification step.
+3. Navigate to **Developers > API keys** in the left sidebar.
+4. Copy the **Secret key** (starts with `sk_test_...`) and use it as `STRIPE_SECRET_KEY` in your `.env` file.
 
-Advanced Type Safety & Validation
-1. Implement a validation library (e.g., Zod or Joi) to define Data Transfer Objects (DTOs) with type schemas. 
-2. Use Zod/Joi schema to validate the request body in the Controller. 
-3. Create Custom Error Classes in TS for consistent error handling (e.g., ProductNotFoundException).
+## Create a MongoDB on MongoDB original website
+1. Go to [https://www.mongodb.com/products/platform/atlas-database](https://www.mongodb.com/products/platform/atlas-database) and sign up for a free account.
+3. Create a Project -> Create a Cluster -> Get the connection string.
+4. Change `.env` file to match with the database connection string.
 
-Database Transactions & Rollbacks
-1. Implement DB Transactions (e.g., in TypeORM/Prisma) for multi-step operations (e.g., create Order → subtract stock → update Order ID). 
-2. Ensure that if any step fails, the entire transaction is rolled back. 
-3. Webhook Error: Set up retry logic if the DB update within the Webhook fails.
+---
 
-Review & Go-Live Preparation
-1. Code Review: Check overall TypeScript usage (e.g., Generics, Utility Types) and code quality. 
-2. Write detailed Documentation (README.md). 
-3. Transition to Stripe Live Mode keys and discuss deployment requirements (Production environment, public Webhook URL).
+## Setup
+
+1. **Clone the repository**
+
+```bash
+# Clone this repo and cd into it
+cd stripe-demo
+```
+
+2. **Install dependencies**
+
+```bash
+npm install
+```
+
+3. **Configure environment variables**
+
+Create a `.env` file in the project root with the content look like the `.env.example`:
+```
+# NodeJS's secrets
+PORT=3000
+
+BASE_URL=http://localhost:3000
+
+STRIPE_SECRET_KEY=sk_test...
+
+STRIPE_WEBHOOK_SECRET=whsec_523d...
+
+# Database's secrets
+MONGO_ADDRESS=cluster0.0mbmrv7.mongodb.net
+MONGO_USERNAME=admin
+MONGO_PASSWORD=superlongpassword
+MONGO_POSTFIX=?appName=MySuperCluster
+```
+
+4. **Set up Stripe CLI for local webhook testing**
+
+- [Install Stripe CLI](https://docs.stripe.com/stripe-cli/install)
+- Log in:
+	```bash
+	stripe login
+	```
+- Forward webhook events to your local server:
+	```bash
+	stripe listen --forward-to localhost:3000/api/v2/webhook
+	```
+- Copy the webhook signing secret (`whsec_...`) from the CLI output and put it in your `.env` as `STRIPE_WEBHOOK_SECRET`.
+
+5. **Run the service**
+
+```bash
+npm run start
+npm run build
+```
+
+## Usage
+
+### Create a new order
+Send a POST request to `/api/v2/orders` with an example JSON body:
+
+```
+{
+    "products": [
+        {
+            "id": "f1e6e674-383a-4f70-ba14-1988bc12d02e",
+            "quantity": 5
+        },
+        {
+            "id": "42895b8f-5f78-43ab-afe6-f635a139fd57",
+            "quantity": 1
+        }
+    ]
+}
+```
+- Product IDs must match those in MongoDB database.
+- The response will include a Stripe Checkout URL and the new order ID.
+
+### Webhook Handling
+- The webhook endpoint `/api/v2/webhook` will update the order status to `PAID` after successful payment.
+- Idempotency is ensured: each order is only marked as paid once, even if Stripe retries the webhook.
+
+## Notes
+All order and product data is stored in MongoDB. You can POST new product to database using `/api/v2/products` with the following request body:
+```json
+{
+    "name": "Shorts",
+    "price": 100,
+    "stock": 10000
+}
+```
