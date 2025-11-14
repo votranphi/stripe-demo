@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { OrderService } from '../services/order.service.js';
 import { OrderStatus } from '../models/order.model.js';
 import { createOrderSchema } from '../validators/order.validator.js';
+import { InsufficientStockException, ProductNotFoundException } from '../errors/CustomError.js';
 
 export class OrderController {
   private orderService: OrderService | null = null;
@@ -40,6 +41,14 @@ export class OrderController {
         }
       });
     } catch (error) {
+      if (error instanceof ProductNotFoundException || error instanceof InsufficientStockException) {
+        res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+
       console.error('Error in createOrder:', error);
       res.status(500).json({
         success: false,
@@ -127,6 +136,14 @@ export class OrderController {
         }
       });
     } catch (error) {
+      if (error instanceof ProductNotFoundException || error instanceof InsufficientStockException) {
+        res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+
       console.error('Error in createOrderV2:', error);
       res.status(500).json({
         success: false,

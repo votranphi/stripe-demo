@@ -17,7 +17,7 @@ export class ProductNotFoundException extends CustomError {
 
 export class InsufficientStockException extends CustomError {
   constructor(productName: string) {
-    super(`Insufficient stock for product ${productName}`, 400);
+    super(`Insufficient stock for product ${productName}`, 409);
   }
 }
 
