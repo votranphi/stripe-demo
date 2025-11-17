@@ -72,7 +72,7 @@ MONGO_POSTFIX=?appName=MySuperCluster
 	```
 - Forward webhook events to your local server:
 	```bash
-	stripe listen --forward-to localhost:3000/api/v2/webhook
+	stripe listen --forward-to localhost:3000/api/v1/webhook
 	```
 - Copy the webhook signing secret (`whsec_...`) from the CLI output and put it in your `.env` as `STRIPE_WEBHOOK_SECRET`.
 
@@ -86,7 +86,7 @@ npm run build
 ## Usage
 
 ### Create a new order
-Send a POST request to `/api/v2/orders` with an example JSON body:
+Send a POST request to `/api/v1/orders` with an example JSON body:
 
 ```
 {
@@ -106,11 +106,11 @@ Send a POST request to `/api/v2/orders` with an example JSON body:
 - The response will include a Stripe Checkout URL and the new order ID.
 
 ### Webhook Handling
-- The webhook endpoint `/api/v2/webhook` will update the order status to `PAID` after successful payment.
+- The webhook endpoint `/api/v1/webhook` will update the order status to `PAID` after successful payment.
 - Idempotency is ensured: each order is only marked as paid once, even if Stripe retries the webhook.
 
 ## Notes
-All order and product data is stored in MongoDB. You can POST new product to database using `/api/v2/products` with the following request body:
+All order and product data is stored in MongoDB. You can POST new product to database using `/api/v1/products` with the following request body:
 ```json
 {
     "name": "Shorts",

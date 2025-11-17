@@ -18,34 +18,8 @@ export class OrderService {
     this.productService = new ProductService();
   }
 
+  // Create order with database transactions
   async createOrder(products: OrderProduct[]): Promise<Order> {
-    // Validate products exist and have sufficient stock
-    await this.validateProducts(products);
-
-    // Tentatively decrement stock for each product
-    await this.decrementProductStock(products);
-
-    try {
-      const newOrder = new OrderModel({
-        id: crypto.randomUUID(),
-        products: products,
-        status: OrderStatus.PENDING
-      });
-
-      await newOrder.save();
-
-      return {
-        id: newOrder.id,
-        products: newOrder.products,
-        status: newOrder.status
-      };
-    } catch (error) {
-      throw new DatabaseException('create order', error instanceof Error ? error : undefined);
-    }
-  }
-
-  // V2: Create order with database transactions
-  async createOrderV2(products: OrderProduct[]): Promise<Order> {
     const session = await Database.getInstance().startSession();
 
     try {
@@ -124,7 +98,7 @@ export class OrderService {
     }
   }
 
-  async createCheckoutSession(orderId: string, version: 'v1' | 'v2' = 'v1'): Promise<string> {
+  async createCheckoutSession(orderId: string, version: string): Promise<string> {
     const order = await this.getOrderById(orderId);
     if (!order) {
       throw new OrderNotFoundException(orderId);
