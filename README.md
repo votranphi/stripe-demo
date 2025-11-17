@@ -51,12 +51,10 @@ Create a `.env` file in the project root with the content look like the `.env.ex
 ```
 # NodeJS's secrets
 PORT=3000
-
 BASE_URL=http://localhost:3000
-
 STRIPE_SECRET_KEY=sk_test...
-
 STRIPE_WEBHOOK_SECRET=whsec_523d...
+NODE_ENV=development
 
 # Database's secrets
 MONGO_ADDRESS=cluster0.0mbmrv7.mongodb.net
