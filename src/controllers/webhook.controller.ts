@@ -14,26 +14,27 @@ export class WebhookController {
 
   // POST /api/v2/webhook
   webhookEventHandler = async (req: Request, res: Response): Promise<void> => {
+    const sig = req.headers['stripe-signature'];
+
+    if (!sig) {
+      // Always return 200 to prevent Stripe from retrying
+      res.status(200).json({
+        received: true,
+        error: 'Missing stripe-signature header'
+      });
+      return;
+    }
+
     try {
-      const sig = req.headers['stripe-signature'];
-
-      if (!sig) {
-        res.status(400).json({
-          success: false,
-          message: 'Missing stripe-signature header'
-        });
-        return;
-      }
-
       // Verify webhook signature and process event
       await this.getWebhookService().handleWebhookEvent(req.body, sig as string);
 
       res.status(200).json({ received: true });
     } catch (error) {
+      // Always return 200 even on error to prevent Stripe from retrying
       console.error('Webhook error:', error);
-      res.status(400).json({
-        success: false,
-        message: 'Webhook handler failed',
+      res.status(200).json({
+        received: true,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }

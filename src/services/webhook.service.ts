@@ -1,6 +1,7 @@
 import { OrderService } from './order.service.js';
 import stripe from '../config/stripe.js';
 import { OrderStatus } from '../models/order.model.js';
+import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
 import Stripe from 'stripe';
 
@@ -43,23 +44,28 @@ export class WebhookService {
   }
 
   private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
+    const orderId = session.metadata?.order_id;
+
+    if (!orderId) {
+      console.error('Order ID not found in session metadata');
+      // Log failed webhook event
+      await this.logWebhookEvent(session.id, 'checkout.session.completed', undefined, 'failed', 'Order ID not found in session metadata');
+      return;
+    }
+
     try {
-      const orderId = session.metadata?.order_id;
-
-      if (!orderId) {
-        console.error('Order ID not found in session metadata');
-        return;
-      }
-
-      // Check for idempotency
-      if (this.orderService.isSessionProcessed(session.id)) {
-        console.log(`Session ${session.id} already processed, skipping...`);
+      // Check for idempotency using database
+      const existingEvent = await WebhookEventModel.findOne({ sessionId: session.id });
+      
+      if (existingEvent) {
+        console.log(`Session ${session.id} already processed at ${existingEvent.processedAt}, skipping...`);
         throw new DuplicateProcessingException(`Session ${session.id} has already been processed`);
       }
 
       // Verify payment status
       if (session.payment_status !== 'paid') {
         console.log(`Payment not completed for session ${session.id}`);
+        await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'failed', 'Payment not completed');
         return;
       }
 
@@ -67,6 +73,7 @@ export class WebhookService {
       const order = await this.orderService.getOrderById(orderId);
       if (!order) {
         console.error(`Order ${orderId} not found`);
+        await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'failed', 'Order not found');
         return;
       }
 
@@ -75,14 +82,46 @@ export class WebhookService {
         await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PAID);
         console.log(`Order ${orderId} marked as PAID`);
         
-        // Mark session as processed
-        this.orderService.markSessionAsProcessed(session.id);
+        // Mark session as processed in database
+        await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'success');
       } else {
         console.log(`Order ${orderId} is already in ${order.status} status`);
+        await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'success', `Order already in ${order.status} status`);
       }
     } catch (error) {
       console.error('Error handling checkout.session.completed:', error);
+      await this.logWebhookEvent(
+        session.id, 
+        'checkout.session.completed', 
+        orderId, 
+        'failed', 
+        error instanceof Error ? error.message : 'Unknown error'
+      );
       throw error;
+    }
+  }
+
+  private async logWebhookEvent(
+    sessionId: string,
+    eventType: string,
+    orderId: string | undefined,
+    status: 'success' | 'failed',
+    errorMessage?: string
+  ): Promise<void> {
+    try {
+      const webhookEvent = new WebhookEventModel({
+        sessionId,
+        eventType,
+        orderId,
+        processedAt: new Date(),
+        status,
+        errorMessage
+      });
+
+      await webhookEvent.save();
+    } catch (error) {
+      console.error('Failed to log webhook event:', error);
+      // Don't throw error here to avoid blocking the webhook processing
     }
   }
 }
