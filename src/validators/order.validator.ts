@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 export const orderProductSchema = z.object({
@@ -8,5 +9,3 @@ export const orderProductSchema = z.object({
 export const createOrderSchema = z.object({
   products: z.array(orderProductSchema).min(1, 'At least one product is required')
 });
-
-export type CreateOrderDto = z.infer<typeof createOrderSchema>;

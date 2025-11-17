@@ -20,6 +20,7 @@ export interface OrderDocument extends Document {
   id: string;
   products: OrderProduct[];
   status: OrderStatus;
+  createdAt?: Date;
 }
 
 const orderSchema = new Schema<OrderDocument>({
@@ -29,6 +30,8 @@ const orderSchema = new Schema<OrderDocument>({
     quantity: { type: Number, required: true }
   }],
   status: { type: String, enum: Object.values(OrderStatus), required: true }
+}, {
+  timestamps: true
 });
 
 export const OrderModel = mongoose.model<OrderDocument>('Order', orderSchema);

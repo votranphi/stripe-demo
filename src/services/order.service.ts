@@ -13,7 +13,6 @@ import {
 
 export class OrderService {
   private productService: ProductService;
-  private processedSessions: Set<string> = new Set();
 
   constructor() {
     this.productService = new ProductService();
@@ -189,16 +188,6 @@ export class OrderService {
         error instanceof Error ? error.message : 'Failed to retrieve session'
       );
     }
-  }
-
-  // Check if session has been processed (idempotency)
-  isSessionProcessed(sessionId: string): boolean {
-    return this.processedSessions.has(sessionId);
-  }
-
-  // Mark session as processed
-  markSessionAsProcessed(sessionId: string): void {
-    this.processedSessions.add(sessionId);
   }
 
   // Update order status with retry logic
