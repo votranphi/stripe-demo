@@ -2,7 +2,7 @@
 import { z } from 'zod';
 
 export const orderProductSchema = z.object({
-  id: z.string().uuid('Invalid product ID format'),
+  id: z.uuid('Invalid product ID format'),
   quantity: z.number().int().positive('Quantity must be a positive integer')
 });
 
