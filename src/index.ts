@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import Database from './config/database.js';
 import apiRoutes from './routes/index.js';
 import { errorHandler } from './middlewares/error.middleware.js';
+import { CronService } from './services/cron.service.js';
 
 dotenv.config();
 
@@ -36,6 +37,10 @@ const startServer = async () => {
     // Connect to MongoDB
     const dbInstance = Database.getInstance();
     await dbInstance.connect();
+
+    // Start cron job service
+    const cronService = new CronService();
+    cronService.start();
 
     // Start Express server
     app.listen(PORT, () => {

@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 export const createProductSchema = z.object({
@@ -5,5 +6,3 @@ export const createProductSchema = z.object({
   price: z.number().positive('Price must be positive'),
   stock: z.number().int().nonnegative('Stock must be a non-negative integer')
 });
-
-export type CreateProductDto = z.infer<typeof createProductSchema>;
