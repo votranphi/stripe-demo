@@ -94,3 +94,43 @@ export class ProductUpdateException extends CustomError {
     );
   }
 }
+
+// 401 Errors
+export class UnauthorizedException extends CustomError {
+  constructor() {
+    super('Authentication required. Please provide a valid token.', 401);
+  }
+}
+
+export class InvalidCredentialsException extends CustomError {
+  constructor() {
+    super('Invalid email or password', 401);
+  }
+}
+
+export class InvalidTokenException extends CustomError {
+  constructor() {
+    super('Invalid or expired token', 401);
+  }
+}
+
+// 403 Errors
+export class ForbiddenException extends CustomError {
+  constructor() {
+    super('Access denied. Insufficient permissions.', 403);
+  }
+}
+
+// 409 Errors
+export class UserAlreadyExistsException extends CustomError {
+  constructor(email: string) {
+    super(`User with email ${email} already exists`, 409);
+  }
+}
+
+// 500 Errors
+export class JWTSecretMissingException extends CustomError {
+  constructor() {
+    super('JWT_SECRET environment variable is not configured', 500);
+  }
+}
