@@ -20,8 +20,15 @@ export class OrderController {
     // Validate request body using Zod schema
     const { products } = createOrderSchema.parse(req.body);
 
+    // Get userId from req.user (assigned by AuthMiddleware)
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized: missing userId' });
+      return;
+    }
+
     // Create order with transaction support
-    const order = await this.getOrderService().createOrder(products);
+    const order = await this.getOrderService().createOrder(products, userId);
 
     // Create Stripe Checkout Session
     const checkoutUrl = await this.getOrderService().createCheckoutSession(order.id, 'v1');

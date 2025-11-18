@@ -19,7 +19,7 @@ export class OrderService {
   }
 
   // Create order with database transactions
-  async createOrder(products: OrderProduct[]): Promise<Order> {
+  async createOrder(products: OrderProduct[], userId: string): Promise<Order> {
     const session = await Database.getInstance().startSession();
 
     try {
@@ -36,7 +36,8 @@ export class OrderService {
         const orderDoc = new OrderModel({
           id: crypto.randomUUID(),
           products: products,
-          status: OrderStatus.PENDING
+          status: OrderStatus.PENDING,
+          userId: userId
         });
 
         await orderDoc.save({ session });
@@ -44,7 +45,8 @@ export class OrderService {
         newOrder = {
           id: orderDoc.id,
           products: orderDoc.products,
-          status: orderDoc.status
+          status: orderDoc.status,
+          userId: orderDoc.userId
         };
       });
 
@@ -69,7 +71,8 @@ export class OrderService {
       return {
         id: order.id,
         products: order.products,
-        status: order.status
+        status: order.status,
+        userId: order.userId
       };
     } catch (error) {
       throw new DatabaseException('fetch order', error instanceof Error ? error : undefined);
@@ -91,7 +94,8 @@ export class OrderService {
       return {
         id: result.id,
         products: result.products,
-        status: result.status
+        status: result.status,
+        userId: result.userId
       };
     } catch (error) {
       throw new DatabaseException('update order status', error instanceof Error ? error : undefined);

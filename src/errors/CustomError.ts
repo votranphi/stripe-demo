@@ -98,7 +98,7 @@ export class ProductUpdateException extends CustomError {
 // 401 Errors
 export class UnauthorizedException extends CustomError {
   constructor() {
-    super('Authentication required. Please provide a valid token.', 401);
+    super('Authentication required. Please provide a valid token', 401);
   }
 }
 
@@ -117,7 +117,7 @@ export class InvalidTokenException extends CustomError {
 // 403 Errors
 export class ForbiddenException extends CustomError {
   constructor() {
-    super('Access denied. Insufficient permissions.', 403);
+    super('Access denied. Insufficient permissions', 403);
   }
 }
 
