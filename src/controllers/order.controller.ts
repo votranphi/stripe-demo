@@ -93,7 +93,7 @@ export class OrderController {
     });
   });
 
-  // POST /api/v1/orders/checkout
+  // POST /api/v1/orders/checkout/create-session
   createCheckoutSession = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
@@ -112,7 +112,7 @@ export class OrderController {
     });
   });
 
-  // GET /api/v1/orders/success?session_id=xxx
+  // GET /api/v1/orders/checkout/success?session_id=xxx
   checkoutSuccess = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.query.session_id as string;
 
@@ -137,7 +137,7 @@ export class OrderController {
     });
   });
 
-  // GET /api/v1/orders/cancel
+  // GET /api/v1/orders/checkout/cancel
   checkoutCancel = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({
       success: true,

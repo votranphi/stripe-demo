@@ -15,8 +15,10 @@ router.delete('/draft/items/:productId', authMiddleware.authenticate, orderContr
 router.patch('/draft/items/:productId', authMiddleware.authenticate, orderController.updateItemQuantity);
 
 // Checkout endpoints
-router.post('/checkout', authMiddleware.authenticate, orderController.createCheckoutSession);
-router.get('/success', orderController.checkoutSuccess);
-router.get('/cancel', orderController.checkoutCancel);
+
+// Unified checkout endpoints
+router.post('/checkout/create-session', authMiddleware.authenticate, orderController.createCheckoutSession);
+router.get('/checkout/success', orderController.checkoutSuccess);
+router.get('/checkout/cancel', orderController.checkoutCancel);
 
 export default router;

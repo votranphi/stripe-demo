@@ -288,8 +288,8 @@ export class OrderService {
         // Build Stripe line items from snapshot data
         const stripeLineItems = this.buildStripeLineItems(result.lineItems);
 
-        const successUrl = `${process.env.BASE_URL}/api/${version}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
-        const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/cancel`;
+        const successUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/cancel`;
 
         // Create Stripe Checkout Session
         const stripeSession = await stripe.checkout.sessions.create({
