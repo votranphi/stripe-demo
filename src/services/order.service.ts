@@ -405,7 +405,7 @@ export class OrderService {
       // If changing to CANCELLED status, handle refund and restock
       if (status === OrderStatus.CANCELLED && currentOrder.status !== OrderStatus.CANCELLED) {
         // Restock products
-        await this.restockProducts(currentOrder.lineItems);
+        await this.incrementProductStock(currentOrder.lineItems);
 
         // Refund payment if order was paid
         if (currentOrder.status === OrderStatus.PAID || 
@@ -537,6 +537,18 @@ export class OrderService {
     }
   }
 
+  private async incrementProductStock(lineItems: OrderLineItem[]): Promise<void> {
+    for (const item of lineItems) {
+      const product = await this.productService.getProductById(item.productId);
+      if (product) {
+        // Add back the quantity to stock
+        await this.productService.updateProduct(item.productId, {
+          stock: product.stock + item.quantity
+        });
+      }
+    }
+  }
+
   private buildStripeLineItems(lineItems: OrderLineItem[]): any[] {
     return lineItems.map((item) => ({
       price_data: {
@@ -548,18 +560,6 @@ export class OrderService {
       },
       quantity: item.quantity
     }));
-  }
-
-  private async restockProducts(lineItems: OrderLineItem[]): Promise<void> {
-    for (const item of lineItems) {
-      const product = await this.productService.getProductById(item.productId);
-      if (product) {
-        // Add back the quantity to stock
-        await this.productService.updateProduct(item.productId, {
-          stock: product.stock + item.quantity
-        });
-      }
-    }
   }
 
   private async refundPayment(paymentIntentId: string, orderId: string): Promise<void> {
