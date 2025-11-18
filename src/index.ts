@@ -23,7 +23,7 @@ app.use('/api', apiRoutes);
 // Middleware for error handler (avoid many try-catch terms in code)
 app.use(errorHandler);
 
-// 404 handler
+// 404 handler (cannot use CustomError here because this route isn't handled by ErrorMiddleware)
 app.use((req, res) => {
   res.status(404).json({ 
     success: false, 

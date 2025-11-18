@@ -109,22 +109,6 @@ export class AuthService {
     }
   }
 
-  async getUserById(id: string): Promise<Omit<AuthResponse, 'token'> | null> {
-    try {
-      const user = await UserModel.findOne({ id }).select('-password');
-      if (!user) {
-        return null;
-      }
-      return {
-        userId: user.id,
-        email: user.email,
-        role: user.role
-      };
-    } catch (error) {
-      throw new DatabaseException('fetch user', error instanceof Error ? error : undefined);
-    }
-  }
-
   verifyToken(token: string): { userId: string; role: UserRole } {
     try {
       const decoded = jwt.verify(token, this.JWT_SECRET) as { userId: string; role: UserRole };
