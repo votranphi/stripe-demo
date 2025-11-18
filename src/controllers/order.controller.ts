@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/order.service.js';
-import { addItemSchema, updateItemSchema } from '../validators/order.validator.js';
+import { AddItemDTO, UpdateItemDTO } from '../dtos/order.dto.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
 
@@ -37,10 +37,9 @@ export class OrderController {
       throw new UnauthorizedException();
     }
 
-    // Validate request body
-    const { productId, quantity } = addItemSchema.parse(req.body);
-
-    const updatedDraft = await this.getOrderService().addItemToDraft(userId, productId, quantity);
+    // Validate request body using DTO
+    const dto = new AddItemDTO(req.body);
+    const updatedDraft = await this.getOrderService().addItemToDraft(userId, dto.productId, dto.quantity);
 
     res.status(200).json({
       success: true,
@@ -82,9 +81,8 @@ export class OrderController {
       throw new Error('Product ID is required');
     }
 
-    const { quantity } = updateItemSchema.parse(req.body);
-
-    const updatedDraft = await this.getOrderService().updateDraftItemQuantity(userId, productId, quantity);
+    const dto = new UpdateItemDTO(req.body);
+    const updatedDraft = await this.getOrderService().updateDraftItemQuantity(userId, productId, dto.quantity);
 
     res.status(200).json({
       success: true,

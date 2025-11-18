@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service.js';
-import { createUpdateProductSchema } from '../validators/product.validator.js';
+import { CreateUpdateProductDTO } from '../dtos/product.dto.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 import { ProductNotFoundException } from '../errors/CustomError.js';
 
@@ -26,13 +26,14 @@ export class ProductController {
 
   // POST /api/v1/products
   createProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { name, price, stock } = createUpdateProductSchema.parse(req.body);
-    const product = await this.getProductService().createProduct({ name, price, stock });
+    const dto = new CreateUpdateProductDTO(req.body);
+    const product = await this.getProductService().createProduct(dto);
     res.status(201).json({
       success: true,
       data: product
     });
   });
+
   // GET /api/v1/products/:id
   getProductById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
@@ -46,9 +47,9 @@ export class ProductController {
   // PUT /api/v1/products/:id
   updateProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
-    // Validate request body using Zod
-    const { name, price, stock } = createUpdateProductSchema.parse(req.body);
-    const updated = await this.getProductService().updateProduct(id, { name, price, stock });
+    // Validate request body using DTO
+    const dto = new CreateUpdateProductDTO(req.body);
+    const updated = await this.getProductService().updateProduct(id, dto);
     if (!updated) {
       throw new ProductNotFoundException(id);
     }

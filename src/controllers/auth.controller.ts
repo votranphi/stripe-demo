@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service.js';
-import { registerSchema, loginSchema } from '../validators/auth.validator.js';
+import { RegisterDTO, LoginDTO } from '../dtos/auth.dto.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 
 export class AuthController {
@@ -16,11 +16,10 @@ export class AuthController {
 
   // POST /api/v1/auth/register
   register = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    // Validate request body using Zod schema
-    const validatedData = registerSchema.parse(req.body);
-
+    // Validate request body using DTO
+    const dto = new RegisterDTO(req.body);
     // Register user
-    const result = await this.getAuthService().register(validatedData);
+    const result = await this.getAuthService().register(dto);
 
     res.status(201).json({
       success: true,
@@ -36,11 +35,10 @@ export class AuthController {
 
   // POST /api/v1/auth/login
   login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    // Validate request body using Zod schema
-    const validatedData = loginSchema.parse(req.body);
-
+    // Validate request body using DTO
+    const dto = new LoginDTO(req.body);
     // Login user
-    const result = await this.getAuthService().login(validatedData);
+    const result = await this.getAuthService().login(dto);
 
     res.status(200).json({
       success: true,
