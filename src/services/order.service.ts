@@ -83,8 +83,7 @@ export class OrderService {
           productId: product.id,
           name: product.name,
           price: product.price,
-          quantity: quantity,
-          sku: product.id // Using product ID as SKU for now
+          quantity: quantity
         });
       }
 

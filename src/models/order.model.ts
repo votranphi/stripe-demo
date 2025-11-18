@@ -15,7 +15,6 @@ export interface OrderLineItem {
   name: string;
   price: number;
   quantity: number;
-  sku?: string;
 }
 
 export interface Order {
@@ -40,8 +39,7 @@ const orderLineItemSchema = new Schema<OrderLineItem>({
   productId: { type: String, required: true },
   name: { type: String, required: true },
   price: { type: Number, required: true },
-  quantity: { type: Number, required: true },
-  sku: { type: String, required: false }
+  quantity: { type: Number, required: true }
 }, { _id: false });
 
 const orderSchema = new Schema<OrderDocument>({
