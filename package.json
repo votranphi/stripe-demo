@@ -1,6 +1,6 @@
 {
   "name": "stripe-demo",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "A Node.js/Express demo service for Stripe Checkout integration (Version 2)",
   "homepage": "https://github.com/votranphi/stripe-demo#readme",
   "bugs": {
