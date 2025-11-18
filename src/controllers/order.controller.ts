@@ -145,4 +145,14 @@ export class OrderController {
       }
     });
   });
+
+  // GET /api/v1/admin/orders
+  getAllOrdersByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    
+  });
+
+  // PUT /api/v1/admin/orders/:id/status
+  updateOrderStatusByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    
+  });
 }

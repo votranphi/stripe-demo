@@ -3,7 +3,6 @@ import { Router } from 'express';
 import { OrderController } from '../../controllers/order.controller.js';
 import { AuthMiddleware } from '../../middlewares/auth.middleware.js';
 
-
 const router = Router();
 const orderController = new OrderController();
 const authMiddleware = new AuthMiddleware();
@@ -15,8 +14,6 @@ router.delete('/draft/items/:productId', authMiddleware.authenticate, orderContr
 router.patch('/draft/items/:productId', authMiddleware.authenticate, orderController.updateItemQuantity);
 
 // Checkout endpoints
-
-// Unified checkout endpoints
 router.post('/checkout/create-session', authMiddleware.authenticate, orderController.createCheckoutSession);
 router.get('/checkout/success', orderController.checkoutSuccess);
 router.get('/checkout/cancel', orderController.checkoutCancel);
