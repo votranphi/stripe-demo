@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service.js';
 import { createProductSchema } from '../validators/product.validator.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
+import { ProductNotFoundException } from '../errors/CustomError.js';
 
 export class ProductController {
   private productService: ProductService | null = null;
@@ -37,8 +38,7 @@ export class ProductController {
     const id = req.params.id as string;
     const product = await this.getProductService().getProductById(id);
     if (!product) {
-      res.status(404).json({ success: false, message: 'Product not found' });
-      return;
+      throw new ProductNotFoundException(id);
     }
     res.status(200).json({ success: true, data: product });
   });
@@ -49,8 +49,7 @@ export class ProductController {
     const { name, price, stock } = req.body;
     const updated = await this.getProductService().updateProduct(id, { name, price, stock });
     if (!updated) {
-      res.status(404).json({ success: false, message: 'Product not found' });
-      return;
+      throw new ProductNotFoundException(id);
     }
     res.status(200).json({ success: true, data: updated });
   });
@@ -60,8 +59,7 @@ export class ProductController {
     const id = req.params.id as string;
     const deleted = await this.getProductService().deleteProduct(id);
     if (!deleted) {
-      res.status(404).json({ success: false, message: 'Product not found' });
-      return;
+      throw new ProductNotFoundException(id);
     }
     res.status(200).json({ success: true, message: 'Product deleted' });
   });

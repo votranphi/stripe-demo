@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/order.service.js';
 import { createOrderSchema } from '../validators/order.validator.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
-import { MissingSessionIdException } from '../errors/CustomError.js';
+import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
 
 export class OrderController {
   private orderService: OrderService | null = null;
@@ -23,8 +23,7 @@ export class OrderController {
     // Get userId from req.user (assigned by AuthMiddleware)
     const userId = req.user?.userId;
     if (!userId) {
-      res.status(401).json({ success: false, message: 'Unauthorized: missing userId' });
-      return;
+      throw new UnauthorizedException();
     }
 
     // Create order with transaction support
