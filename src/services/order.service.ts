@@ -408,7 +408,10 @@ export class OrderService {
         await this.restockProducts(currentOrder.lineItems);
 
         // Refund payment if order was paid
-        if (currentOrder.status === OrderStatus.PAID || currentOrder.status === OrderStatus.SHIPPED || currentOrder.status === OrderStatus.DELIVERED) {
+        if (currentOrder.status === OrderStatus.PAID || 
+            currentOrder.status === OrderStatus.PROCESSING || 
+            currentOrder.status === OrderStatus.SHIPPED || 
+            currentOrder.status === OrderStatus.DELIVERED) {
           if (currentOrder.stripePaymentIntentId) {
             await this.refundPayment(currentOrder.stripePaymentIntentId, id);
           }
