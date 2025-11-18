@@ -85,6 +85,11 @@ export class WebhookService {
 
       // Update order status only if it's still PENDING
       if (order.status === OrderStatus.PENDING) {
+        // Save payment_intent ID to order for future refunds
+        if (session.payment_intent && typeof session.payment_intent === 'string') {
+          await this.orderService.savePaymentIntentId(orderId, session.payment_intent);
+        }
+        
         await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PAID);
         console.log(`Order ${orderId} marked as PAID`);
         

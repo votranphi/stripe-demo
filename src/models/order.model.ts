@@ -23,6 +23,7 @@ export interface Order {
   status: OrderStatus;
   userId: string;
   totalAmount?: number;
+  stripePaymentIntentId?: string;
 }
 
 export interface OrderDocument extends Document {
@@ -31,6 +32,7 @@ export interface OrderDocument extends Document {
   status: OrderStatus;
   userId: string;
   totalAmount?: number;
+  stripePaymentIntentId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -47,7 +49,8 @@ const orderSchema = new Schema<OrderDocument>({
   lineItems: { type: [orderLineItemSchema], required: true, default: [] },
   status: { type: String, enum: Object.values(OrderStatus), required: true },
   userId: { type: String, required: true },
-  totalAmount: { type: Number, required: false }
+  totalAmount: { type: Number, required: false },
+  stripePaymentIntentId: { type: String, required: false }
 }, {
   timestamps: true
 });

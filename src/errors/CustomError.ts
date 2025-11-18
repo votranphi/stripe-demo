@@ -132,6 +132,15 @@ export class CheckoutSessionException extends CustomError {
   }
 }
 
+export class StripeRefundException extends CustomError {
+  constructor(orderId: string, originalError?: Error) {
+    super(
+      `Failed to refund payment for order ${orderId}${originalError ? `: ${originalError.message}` : ''}`,
+      500
+    );
+  }
+}
+
 export class ProductCreationException extends CustomError {
   constructor(productName: string, originalError?: Error) {
     super(

@@ -12,6 +12,7 @@ import {
   EmptyDraftException,
   DatabaseException,
   CheckoutSessionException,
+  StripeRefundException,
 } from '../errors/CustomError.js';
 
 export class OrderService {
@@ -38,7 +39,8 @@ export class OrderService {
         lineItems: draft.lineItems,
         status: draft.status,
         userId: draft.userId,
-        totalAmount: draft.totalAmount
+        totalAmount: draft.totalAmount,
+        stripePaymentIntentId: draft.stripePaymentIntentId
       };
     } catch (error) {
       if (error instanceof DraftOrderNotFoundException) {
@@ -114,7 +116,8 @@ export class OrderService {
         lineItems: result.lineItems,
         status: result.status,
         userId: result.userId,
-        totalAmount: result.totalAmount
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId
       };
     } catch (error) {
       if (
@@ -168,7 +171,8 @@ export class OrderService {
         lineItems: result.lineItems,
         status: result.status,
         userId: result.userId,
-        totalAmount: result.totalAmount
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId
       };
     } catch (error) {
       if (
@@ -235,7 +239,8 @@ export class OrderService {
         lineItems: result.lineItems,
         status: result.status,
         userId: result.userId,
-        totalAmount: result.totalAmount
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId
       };
     } catch (error) {
       if (
@@ -351,7 +356,8 @@ export class OrderService {
         lineItems: draftOrder.lineItems,
         status: draftOrder.status,
         userId: draftOrder.userId,
-        totalAmount: draftOrder.totalAmount
+        totalAmount: draftOrder.totalAmount,
+        stripePaymentIntentId: draftOrder.stripePaymentIntentId
       };
     } catch (error) {
       throw new DatabaseException('create new draft order', error instanceof Error ? error : undefined);
@@ -369,15 +375,47 @@ export class OrderService {
         lineItems: order.lineItems,
         status: order.status,
         userId: order.userId,
-        totalAmount: order.totalAmount
+        totalAmount: order.totalAmount,
+        stripePaymentIntentId: order.stripePaymentIntentId
       };
     } catch (error) {
       throw new DatabaseException('fetch order', error instanceof Error ? error : undefined);
     }
   }
 
+  async savePaymentIntentId(id: string, paymentIntentId: string): Promise<void> {
+    try {
+      await OrderModel.findOneAndUpdate(
+        { id },
+        { $set: { stripePaymentIntentId: paymentIntentId } }
+      );
+    } catch (error) {
+      throw new DatabaseException('save payment intent ID', error instanceof Error ? error : undefined);
+    }
+  }
+
   async updateOrderStatus(id: string, status: OrderStatus): Promise<Order | null> {
     try {
+      // Get current order first
+      const currentOrder = await OrderModel.findOne({ id });
+      if (!currentOrder) {
+        return null;
+      }
+
+      // If changing to CANCELLED status, handle refund and restock
+      if (status === OrderStatus.CANCELLED && currentOrder.status !== OrderStatus.CANCELLED) {
+        // Restock products
+        await this.restockProducts(currentOrder.lineItems);
+
+        // Refund payment if order was paid
+        if (currentOrder.status === OrderStatus.PAID || currentOrder.status === OrderStatus.SHIPPED || currentOrder.status === OrderStatus.DELIVERED) {
+          if (currentOrder.stripePaymentIntentId) {
+            await this.refundPayment(currentOrder.stripePaymentIntentId, id);
+          }
+        }
+      }
+
+      // Update order status
       const result = await OrderModel.findOneAndUpdate(
         { id },
         { $set: { status } },
@@ -393,9 +431,13 @@ export class OrderService {
         lineItems: result.lineItems,
         status: result.status,
         userId: result.userId,
-        totalAmount: result.totalAmount
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId
       };
     } catch (error) {
+      if (error instanceof StripeRefundException) {
+        throw error;
+      }
       throw new DatabaseException('update order status', error instanceof Error ? error : undefined);
     }
   }
@@ -459,7 +501,8 @@ export class OrderService {
         lineItems: order.lineItems,
         status: order.status,
         userId: order.userId,
-        totalAmount: order.totalAmount
+        totalAmount: order.totalAmount,
+        stripePaymentIntentId: order.stripePaymentIntentId
       }));
     } catch (error) {
       throw new DatabaseException('fetch all orders', error instanceof Error ? error : undefined);
@@ -502,5 +545,27 @@ export class OrderService {
       },
       quantity: item.quantity
     }));
+  }
+
+  private async restockProducts(lineItems: OrderLineItem[]): Promise<void> {
+    for (const item of lineItems) {
+      const product = await this.productService.getProductById(item.productId);
+      if (product) {
+        // Add back the quantity to stock
+        await this.productService.updateProduct(item.productId, {
+          stock: product.stock + item.quantity
+        });
+      }
+    }
+  }
+
+  private async refundPayment(paymentIntentId: string, orderId: string): Promise<void> {
+    try {
+      await stripe.refunds.create({
+        payment_intent: paymentIntentId,
+      });
+    } catch (error) {
+      throw new StripeRefundException(orderId, error instanceof Error ? error : undefined);
+    }
   }
 }
