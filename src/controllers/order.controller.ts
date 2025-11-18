@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/order.service.js';
-import { createOrderSchema } from '../validators/order.validator.js';
+import { addItemSchema, updateItemSchema } from '../validators/order.validator.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
 
@@ -15,27 +15,98 @@ export class OrderController {
     return this.orderService;
   }
 
-  // POST /api/v1/orders
-  createOrder = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    // Validate request body using Zod schema
-    const { products } = createOrderSchema.parse(req.body);
-
-    // Get userId from req.user (assigned by AuthMiddleware)
+  // GET /api/v1/orders/draft
+  getDraft = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException();
     }
 
-    // Create order with transaction support
-    const order = await this.getOrderService().createOrder(products, userId);
+    const draft = await this.getOrderService().getUserDraft(userId);
 
-    // Create Stripe Checkout Session
-    const checkoutUrl = await this.getOrderService().createCheckoutSession(order.id, 'v1');
+    res.status(200).json({
+      success: true,
+      data: draft
+    });
+  });
+
+  // POST /api/v1/orders/draft/items
+  addItemToDraft = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    // Validate request body
+    const { productId, quantity } = addItemSchema.parse(req.body);
+
+    const updatedDraft = await this.getOrderService().addItemToDraft(userId, productId, quantity);
+
+    res.status(200).json({
+      success: true,
+      message: 'Item added to cart',
+      data: updatedDraft
+    });
+  });
+
+  // DELETE /api/v1/orders/draft/items/:productId
+  removeItemFromDraft = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const { productId } = req.params;
+    if (!productId) {
+      throw new Error('Product ID is required');
+    }
+
+    const updatedDraft = await this.getOrderService().removeItemFromDraft(userId, productId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Item removed from cart',
+      data: updatedDraft
+    });
+  });
+
+  // PATCH /api/v1/orders/draft/items/:productId
+  updateItemQuantity = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const { productId } = req.params;
+    if (!productId) {
+      throw new Error('Product ID is required');
+    }
+
+    const { quantity } = updateItemSchema.parse(req.body);
+
+    const updatedDraft = await this.getOrderService().updateDraftItemQuantity(userId, productId, quantity);
+
+    res.status(200).json({
+      success: true,
+      message: 'Cart item updated',
+      data: updatedDraft
+    });
+  });
+
+  // POST /api/v1/orders/checkout
+  createCheckoutSession = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    // Create checkout from user's draft
+    const { checkoutUrl, orderId } = await this.getOrderService().createCheckoutFromDraft(userId, 'v1');
 
     res.status(201).json({
       success: true,
       data: {
-        order: order,
+        orderId: orderId,
         checkoutUrl: checkoutUrl
       }
     });

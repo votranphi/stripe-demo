@@ -8,7 +8,14 @@ const router = Router();
 const orderController = new OrderController();
 const authMiddleware = new AuthMiddleware();
 
-router.post('/', authMiddleware.authenticate, orderController.createOrder);
+// Cart/Draft endpoints
+router.get('/draft', authMiddleware.authenticate, orderController.getDraft);
+router.post('/draft/items', authMiddleware.authenticate, orderController.addItemToDraft);
+router.delete('/draft/items/:productId', authMiddleware.authenticate, orderController.removeItemFromDraft);
+router.patch('/draft/items/:productId', authMiddleware.authenticate, orderController.updateItemQuantity);
+
+// Checkout endpoints
+router.post('/checkout', authMiddleware.authenticate, orderController.createCheckoutSession);
 router.get('/success', orderController.checkoutSuccess);
 router.get('/cancel', orderController.checkoutCancel);
 

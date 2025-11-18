@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { UserModel, UserRole } from '../models/user.model.js';
+import { OrderModel, OrderStatus } from '../models/order.model.js';
 import {
   UserAlreadyExistsException,
   InvalidCredentialsException,
@@ -51,12 +52,27 @@ export class AuthService {
       // Hash password
       const hashedPassword = await bcrypt.hash(input.password, this.SALT_ROUNDS);
 
-      // Create user
-      const userDoc = new UserModel({
+      // Create user ID
+      const userId = crypto.randomUUID();
+
+      // Create a DRAFT order for the new user (shopping cart)
+      const draftOrder = new OrderModel({
         id: crypto.randomUUID(),
+        lineItems: [],
+        status: OrderStatus.DRAFT,
+        userId: userId,
+        totalAmount: 0
+      });
+
+      await draftOrder.save();
+
+      // Create user with reference to draft order
+      const userDoc = new UserModel({
+        id: userId,
         email: input.email,
         password: hashedPassword,
-        role: input.role || UserRole.USER
+        role: input.role || UserRole.USER,
+        draftOrderId: draftOrder.id
       });
 
       await userDoc.save();

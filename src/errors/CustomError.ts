@@ -67,6 +67,12 @@ export class OrderNotFoundException extends CustomError {
   }
 }
 
+export class DraftOrderNotFoundException extends CustomError {
+  constructor(userId: string) {
+    super(`Draft order not found for user ${userId}`, 404);
+  }
+}
+
 // 409 Errors
 export class InsufficientStockException extends CustomError {
   constructor(productName: string) {
@@ -83,6 +89,24 @@ export class DuplicateProcessingException extends CustomError {
 export class InvalidOrderStatusException extends CustomError {
   constructor(currentStatus: string) {
     super(`Order is not in PENDING status. Current status: ${currentStatus}`, 409);
+  }
+}
+
+export class InvalidDraftOperationException extends CustomError {
+  constructor(message: string) {
+    super(`Invalid draft operation: ${message}`, 409);
+  }
+}
+
+export class ItemNotInDraftException extends CustomError {
+  constructor(productId: string) {
+    super(`Product ${productId} is not in the draft order`, 409);
+  }
+}
+
+export class EmptyDraftException extends CustomError {
+  constructor() {
+    super('Cannot checkout with an empty cart', 409);
   }
 }
 

@@ -45,11 +45,17 @@ export class WebhookService {
 
   private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
     const orderId = session.metadata?.order_id;
+    const userId = session.metadata?.user_id;
 
     if (!orderId) {
       console.error('Order ID not found in session metadata');
-      // Log failed webhook event
       await this.logWebhookEvent(session.id, 'checkout.session.completed', undefined, 'failed', 'Order ID not found in session metadata');
+      return;
+    }
+
+    if (!userId) {
+      console.error('User ID not found in session metadata');
+      await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'failed', 'User ID not found in session metadata');
       return;
     }
 
@@ -81,6 +87,10 @@ export class WebhookService {
       if (order.status === OrderStatus.PENDING) {
         await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PAID);
         console.log(`Order ${orderId} marked as PAID`);
+        
+        // Create a fresh DRAFT order for the user (new shopping cart)
+        await this.orderService.createNewDraft(userId);
+        console.log(`New draft order created for user ${userId}`);
         
         // Mark session as processed in database
         await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'success');
