@@ -28,3 +28,23 @@ export class UpdateItemDTO {
     this.quantity = parsed.quantity;
   }
 }
+
+export class UpdateOrderStatusDTO {
+  static schema = z.object({
+    status: z.enum([
+      'DRAFT',
+      'PENDING',
+      'PAID',
+      'SHIPPED',
+      'DELIVERED',
+      'CANCELLED',
+    ], { message: 'Invalid order status' })
+  });
+
+  status: string;
+
+  constructor(data: unknown) {
+    const parsed = UpdateOrderStatusDTO.schema.parse(data);
+    this.status = parsed.status;
+  }
+}

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/order.service.js';
-import { AddItemDTO, UpdateItemDTO } from '../dtos/order.dto.js';
+import { AddItemDTO, UpdateItemDTO, UpdateOrderStatusDTO } from '../dtos/order.dto.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
 
@@ -105,22 +105,14 @@ export class OrderController {
   updateOrderStatusByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     // isAdmin middleware should already protect this route
     const { id } = req.params;
-    const { status } = req.body;
-
     if (!id) {
       throw new Error('Order ID is required');
     }
-    if (!status) {
-      throw new Error('Order status is required');
-    }
 
-    // Validate status
-    const allowedStatuses = ['DRAFT', 'PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
-    if (!allowedStatuses.includes(status)) {
-      throw new Error('Invalid order status');
-    }
+    // Validate and parse body using DTO
+    const dto = new UpdateOrderStatusDTO(req.body);
 
-    const updatedOrder = await this.getOrderService().updateOrderStatus(id, status);
+    const updatedOrder = await this.getOrderService().updateOrderStatus(id, dto.status as import('../models/order.model.js').OrderStatus);
     if (!updatedOrder) {
       res.status(404).json({ success: false, message: 'Order not found' });
       return;
