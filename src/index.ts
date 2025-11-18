@@ -25,9 +25,9 @@ app.use(errorHandler);
 
 // 404 handler (cannot use CustomError here because this route isn't handled by ErrorMiddleware)
 app.use((req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'Route not found' 
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
   });
 });
 

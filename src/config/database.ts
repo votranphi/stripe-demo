@@ -6,7 +6,7 @@ dotenv.config();
 class Database {
   private static instance: Database;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): Database {
     if (!Database.instance) {
@@ -26,7 +26,7 @@ class Database {
       const uri = `mongodb+srv://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_ADDRESS}/${MONGO_POSTFIX}`;
 
       await mongoose.connect(uri);
-      
+
       console.log('Connected to MongoDB successfully');
     } catch (error) {
       console.error('MongoDB connection error:', error);

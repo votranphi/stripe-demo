@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/auth.service.js';
 import { UserRole } from '../models/user.model.js';
-import { 
-  UnauthorizedException, 
+import {
+  UnauthorizedException,
   ForbiddenException,
-  InvalidTokenException 
+  InvalidTokenException
 } from '../errors/CustomError.js';
 
 // Extend Express Request interface to include user
@@ -31,7 +31,7 @@ export class AuthMiddleware {
     try {
       // Get token from Authorization header
       const authHeader = req.headers.authorization;
-      
+
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         throw new UnauthorizedException();
       }
