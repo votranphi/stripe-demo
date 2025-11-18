@@ -32,4 +32,37 @@ export class ProductController {
       data: product
     });
   });
+  // GET /api/v1/products/:id
+  getProductById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
+    const product = await this.getProductService().getProductById(id);
+    if (!product) {
+      res.status(404).json({ success: false, message: 'Product not found' });
+      return;
+    }
+    res.status(200).json({ success: true, data: product });
+  });
+
+  // PUT /api/v1/products/:id
+  updateProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
+    const { name, price, stock } = req.body;
+    const updated = await this.getProductService().updateProduct(id, { name, price, stock });
+    if (!updated) {
+      res.status(404).json({ success: false, message: 'Product not found' });
+      return;
+    }
+    res.status(200).json({ success: true, data: updated });
+  });
+
+  // DELETE /api/v1/products/:id
+  deleteProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
+    const deleted = await this.getProductService().deleteProduct(id);
+    if (!deleted) {
+      res.status(404).json({ success: false, message: 'Product not found' });
+      return;
+    }
+    res.status(200).json({ success: true, message: 'Product deleted' });
+  });
 }
