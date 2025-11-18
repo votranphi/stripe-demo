@@ -3,6 +3,7 @@ import { OrderService } from '../services/order.service.js';
 import { AddItemDTO, UpdateItemDTO, UpdateOrderStatusDTO } from '../dtos/order.dto.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';
 import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
+import { OrderStatus } from '../models/order.model.js';
 
 export class OrderController {
   private orderService: OrderService | null = null;
@@ -112,7 +113,7 @@ export class OrderController {
     // Validate and parse body using DTO
     const dto = new UpdateOrderStatusDTO(req.body);
 
-    const updatedOrder = await this.getOrderService().updateOrderStatus(id, dto.status as import('../models/order.model.js').OrderStatus);
+    const updatedOrder = await this.getOrderService().updateOrderStatus(id, dto.status as OrderStatus);
     if (!updatedOrder) {
       res.status(404).json({ success: false, message: 'Order not found' });
       return;
