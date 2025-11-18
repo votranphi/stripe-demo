@@ -91,6 +91,47 @@ export class OrderController {
     });
   });
 
+  // GET /api/v1/admin/orders
+  getAllOrdersByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    // isAdmin middleware should already protect this route
+    const orders = await this.getOrderService().getAllOrders();
+    res.status(200).json({
+      success: true,
+      data: orders
+    });
+  });
+
+  // PUT /api/v1/admin/orders/:id/status
+  updateOrderStatusByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    // isAdmin middleware should already protect this route
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!id) {
+      throw new Error('Order ID is required');
+    }
+    if (!status) {
+      throw new Error('Order status is required');
+    }
+
+    // Validate status
+    const allowedStatuses = ['DRAFT', 'PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+    if (!allowedStatuses.includes(status)) {
+      throw new Error('Invalid order status');
+    }
+
+    const updatedOrder = await this.getOrderService().updateOrderStatus(id, status);
+    if (!updatedOrder) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Order status updated',
+      data: updatedOrder
+    });
+  });
+
   // POST /api/v1/orders/checkout/create-session
   createCheckoutSession = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
@@ -144,15 +185,5 @@ export class OrderController {
         redirectUrl: '/products'
       }
     });
-  });
-
-  // GET /api/v1/admin/orders
-  getAllOrdersByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    
-  });
-
-  // PUT /api/v1/admin/orders/:id/status
-  updateOrderStatusByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    
   });
 }

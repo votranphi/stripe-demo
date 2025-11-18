@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export class AddItemDTO {
   static schema = z.object({
-    productId: z.string().uuid('Invalid product ID format'),
+    productId: z.uuid('Invalid product ID format'),
     quantity: z.number().int().positive('Quantity must be a positive integer'),
   });
 

@@ -96,11 +96,11 @@ export class OrderService {
       // Update draft order
       const result = await OrderModel.findOneAndUpdate(
         { id: draft.id },
-        { 
-          $set: { 
+        {
+          $set: {
             lineItems: updatedLineItems,
             totalAmount: totalAmount
-          } 
+          }
         },
         { new: true }
       );
@@ -150,11 +150,11 @@ export class OrderService {
       // Update draft order
       const result = await OrderModel.findOneAndUpdate(
         { id: draft.id },
-        { 
-          $set: { 
+        {
+          $set: {
             lineItems: updatedLineItems,
             totalAmount: totalAmount
-          } 
+          }
         },
         { new: true }
       );
@@ -217,11 +217,11 @@ export class OrderService {
       // Update draft order
       const result = await OrderModel.findOneAndUpdate(
         { id: draft.id },
-        { 
-          $set: { 
+        {
+          $set: {
             lineItems: updatedLineItems,
             totalAmount: totalAmount
-          } 
+          }
         },
         { new: true }
       );
@@ -449,6 +449,21 @@ export class OrderService {
       `update order status after ${maxRetries} attempts`,
       lastError || undefined
     );
+  }
+
+  async getAllOrders(): Promise<Order[]> {
+    try {
+      const orders = await OrderModel.find({});
+      return orders.map(order => ({
+        id: order.id,
+        lineItems: order.lineItems,
+        status: order.status,
+        userId: order.userId,
+        totalAmount: order.totalAmount
+      }));
+    } catch (error) {
+      throw new DatabaseException('fetch all orders', error instanceof Error ? error : undefined);
+    }
   }
 
   // Private helper methods
