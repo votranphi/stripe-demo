@@ -1,3 +1,4 @@
+// ...existing code...
 import { Product, ProductModel } from '../models/product.model.js';
 import {
   DatabaseException,
@@ -85,6 +86,14 @@ export class ProductService {
       };
     } catch (error) {
       throw new ProductUpdateException(id, error instanceof Error ? error : undefined);
+    }
+  }
+  async deleteProduct(id: string): Promise<boolean> {
+    try {
+      const result = await ProductModel.findOneAndDelete({ id });
+      return !!result;
+    } catch (error) {
+      throw new DatabaseException('delete product', error instanceof Error ? error : undefined);
     }
   }
 }

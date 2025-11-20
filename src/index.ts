@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT;
 
 // Webhook endpoint needs raw body for signature verification
-app.use('/api/v2/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/v1/webhook', express.raw({ type: 'application/json' }));
 
 // Middleware
 app.use(express.json());
@@ -23,11 +23,11 @@ app.use('/api', apiRoutes);
 // Middleware for error handler (avoid many try-catch terms in code)
 app.use(errorHandler);
 
-// 404 handler
+// 404 handler (cannot use CustomError here because this route isn't handled by ErrorMiddleware)
 app.use((req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'Route not found' 
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
   });
 });
 
@@ -46,7 +46,6 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
       console.log(`API available at http://localhost:${PORT}/api/v1`);
-      console.log(`API available at http://localhost:${PORT}/api/v2`);
     });
 
     // Graceful shutdown

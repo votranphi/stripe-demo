@@ -9,19 +9,6 @@ export class CustomError extends Error {
   }
 }
 
-// 404 Errors
-export class ProductNotFoundException extends CustomError {
-  constructor(productId: string) {
-    super(`Product with id ${productId} not found`, 404);
-  }
-}
-
-export class OrderNotFoundException extends CustomError {
-  constructor(orderId: string) {
-    super(`Order with id ${orderId} not found`, 404);
-  }
-}
-
 // 400 Errors
 export class ValidationException extends CustomError {
   constructor(message: string) {
@@ -38,6 +25,51 @@ export class WebhookSignatureException extends CustomError {
 export class MissingSessionIdException extends CustomError {
   constructor() {
     super('Missing session_id in query parameters', 400);
+  }
+}
+
+// 401 Errors
+export class UnauthorizedException extends CustomError {
+  constructor() {
+    super('Authentication required. Please provide a valid token', 401);
+  }
+}
+
+export class InvalidCredentialsException extends CustomError {
+  constructor() {
+    super('Invalid email or password', 401);
+  }
+}
+
+export class InvalidTokenException extends CustomError {
+  constructor() {
+    super('Invalid or expired token', 401);
+  }
+}
+
+// 403 Errors
+export class ForbiddenException extends CustomError {
+  constructor() {
+    super('Access denied. Insufficient permissions', 403);
+  }
+}
+
+// 404 Errors
+export class ProductNotFoundException extends CustomError {
+  constructor(productId: string) {
+    super(`Product with id ${productId} not found`, 404);
+  }
+}
+
+export class OrderNotFoundException extends CustomError {
+  constructor(orderId: string) {
+    super(`Order with id ${orderId} not found`, 404);
+  }
+}
+
+export class DraftOrderNotFoundException extends CustomError {
+  constructor(userId: string) {
+    super(`Draft order not found for user ${userId}`, 404);
   }
 }
 
@@ -60,6 +92,30 @@ export class InvalidOrderStatusException extends CustomError {
   }
 }
 
+export class InvalidDraftOperationException extends CustomError {
+  constructor(message: string) {
+    super(`Invalid draft operation: ${message}`, 409);
+  }
+}
+
+export class ItemNotInDraftException extends CustomError {
+  constructor(productId: string) {
+    super(`Product ${productId} is not in the draft order`, 409);
+  }
+}
+
+export class EmptyDraftException extends CustomError {
+  constructor() {
+    super('Cannot checkout with an empty cart', 409);
+  }
+}
+
+export class UserAlreadyExistsException extends CustomError {
+  constructor(email: string) {
+    super(`User with email ${email} already exists`, 409);
+  }
+}
+
 // 500 Errors
 export class DatabaseException extends CustomError {
   constructor(operation: string, originalError?: Error) {
@@ -76,7 +132,15 @@ export class CheckoutSessionException extends CustomError {
   }
 }
 
-// Product-specific exceptions
+export class StripeRefundException extends CustomError {
+  constructor(orderId: string, originalError?: Error) {
+    super(
+      `Failed to refund payment for order ${orderId}${originalError ? `: ${originalError.message}` : ''}`,
+      500
+    );
+  }
+}
+
 export class ProductCreationException extends CustomError {
   constructor(productName: string, originalError?: Error) {
     super(
@@ -92,5 +156,11 @@ export class ProductUpdateException extends CustomError {
       `Failed to update product ${productId}${originalError ? `: ${originalError.message}` : ''}`,
       500
     );
+  }
+}
+
+export class JWTSecretMissingException extends CustomError {
+  constructor() {
+    super('JWT_SECRET environment variable is not configured', 500);
   }
 }

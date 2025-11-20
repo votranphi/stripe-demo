@@ -67,10 +67,7 @@ export const errorHandler = (
   });
 };
 
-/**
- * Async handler wrapper to catch errors in async route handlers
- * Eliminates need for try-catch in every controller method
- */
+// Async handler wrapper to catch errors in async route handlers. Eliminates need for try-catch in every controller method
 export const asyncHandler = (
   fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
 ) => {

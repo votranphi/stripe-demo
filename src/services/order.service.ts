@@ -1,14 +1,18 @@
 import Database from '../config/database.js';
-import { Order, OrderModel, OrderStatus, OrderProduct } from '../models/order.model.js';
+import { Order, OrderModel, OrderStatus, OrderLineItem } from '../models/order.model.js';
+import { UserModel } from '../models/user.model.js';
 import { ProductService } from './product.service.js';
 import stripe from '../config/stripe.js';
 import {
   ProductNotFoundException,
   InsufficientStockException,
   OrderNotFoundException,
+  DraftOrderNotFoundException,
+  ItemNotInDraftException,
+  EmptyDraftException,
   DatabaseException,
   CheckoutSessionException,
-  InvalidOrderStatusException
+  StripeRefundException,
 } from '../errors/CustomError.js';
 
 export class OrderService {
@@ -18,71 +22,356 @@ export class OrderService {
     this.productService = new ProductService();
   }
 
-  async createOrder(products: OrderProduct[]): Promise<Order> {
-    // Validate products exist and have sufficient stock
-    await this.validateProducts(products);
-
-    // Tentatively decrement stock for each product
-    await this.decrementProductStock(products);
-
+  async getUserDraft(userId: string): Promise<Order> {
     try {
-      const newOrder = new OrderModel({
-        id: crypto.randomUUID(),
-        products: products,
-        status: OrderStatus.PENDING
-      });
+      const user = await UserModel.findOne({ id: userId });
+      if (!user || !user.draftOrderId) {
+        throw new DraftOrderNotFoundException(userId);
+      }
 
-      await newOrder.save();
+      const draft = await OrderModel.findOne({ id: user.draftOrderId });
+      if (!draft) {
+        throw new DraftOrderNotFoundException(userId);
+      }
 
       return {
-        id: newOrder.id,
-        products: newOrder.products,
-        status: newOrder.status
+        id: draft.id,
+        lineItems: draft.lineItems,
+        status: draft.status,
+        userId: draft.userId,
+        totalAmount: draft.totalAmount,
+        stripePaymentIntentId: draft.stripePaymentIntentId,
+        stripeSessionId: draft.stripeSessionId
       };
     } catch (error) {
-      throw new DatabaseException('create order', error instanceof Error ? error : undefined);
+      if (error instanceof DraftOrderNotFoundException) {
+        throw error;
+      }
+      throw new DatabaseException('fetch user draft', error instanceof Error ? error : undefined);
     }
   }
 
-  // V2: Create order with database transactions
-  async createOrderV2(products: OrderProduct[]): Promise<Order> {
+  async addItemToDraft(userId: string, productId: string, quantity: number): Promise<Order> {
+    try {
+      // Get draft order
+      const draft = await this.getUserDraft(userId);
+
+      // Validate product exists and has sufficient stock
+      const product = await this.productService.getProductById(productId);
+      if (!product) {
+        throw new ProductNotFoundException(productId);
+      }
+
+      // Calculate total quantity including existing draft items
+      const existingItem = draft.lineItems.find(item => item.productId === productId);
+      const totalQuantity = (existingItem?.quantity || 0) + quantity;
+
+      if (product.stock < totalQuantity) {
+        throw new InsufficientStockException(product.name);
+      }
+
+      // Update or add line item
+      const updatedLineItems = [...draft.lineItems];
+      const itemIndex = updatedLineItems.findIndex(item => item.productId === productId);
+
+      if (itemIndex >= 0) {
+        // Update existing item
+        const item = updatedLineItems[itemIndex];
+        if (item) {
+          item.quantity = totalQuantity;
+        }
+      } else {
+        // Add new item with snapshot data
+        updatedLineItems.push({
+          productId: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: quantity
+        });
+      }
+
+      // Calculate total amount
+      const totalAmount = updatedLineItems.reduce(
+        (sum, item) => sum + (item.price * item.quantity),
+        0
+      );
+
+      // Update draft order
+      const result = await OrderModel.findOneAndUpdate(
+        { id: draft.id },
+        {
+          $set: {
+            lineItems: updatedLineItems,
+            totalAmount: totalAmount
+          }
+        },
+        { new: true }
+      );
+
+      if (!result) {
+        throw new OrderNotFoundException(draft.id);
+      }
+
+      return {
+        id: result.id,
+        lineItems: result.lineItems,
+        status: result.status,
+        userId: result.userId,
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId,
+        stripeSessionId: result.stripeSessionId
+      };
+    } catch (error) {
+      if (
+        error instanceof DraftOrderNotFoundException ||
+        error instanceof ProductNotFoundException ||
+        error instanceof InsufficientStockException
+      ) {
+        throw error;
+      }
+      throw new DatabaseException('add item to draft', error instanceof Error ? error : undefined);
+    }
+  }
+
+  async removeItemFromDraft(userId: string, productId: string): Promise<Order> {
+    try {
+      const draft = await this.getUserDraft(userId);
+
+      // Check if item exists in draft
+      const itemExists = draft.lineItems.some(item => item.productId === productId);
+      if (!itemExists) {
+        throw new ItemNotInDraftException(productId);
+      }
+
+      // Remove item
+      const updatedLineItems = draft.lineItems.filter(item => item.productId !== productId);
+
+      // Calculate total amount
+      const totalAmount = updatedLineItems.reduce(
+        (sum, item) => sum + (item.price * item.quantity),
+        0
+      );
+
+      // Update draft order
+      const result = await OrderModel.findOneAndUpdate(
+        { id: draft.id },
+        {
+          $set: {
+            lineItems: updatedLineItems,
+            totalAmount: totalAmount
+          }
+        },
+        { new: true }
+      );
+
+      if (!result) {
+        throw new OrderNotFoundException(draft.id);
+      }
+
+      return {
+        id: result.id,
+        lineItems: result.lineItems,
+        status: result.status,
+        userId: result.userId,
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId
+      };
+    } catch (error) {
+      if (
+        error instanceof DraftOrderNotFoundException ||
+        error instanceof ItemNotInDraftException
+      ) {
+        throw error;
+      }
+      throw new DatabaseException('remove item from draft', error instanceof Error ? error : undefined);
+    }
+  }
+
+  async updateDraftItemQuantity(userId: string, productId: string, quantity: number): Promise<Order> {
+    try {
+      const draft = await this.getUserDraft(userId);
+
+      // Check if item exists in draft
+      const itemIndex = draft.lineItems.findIndex(item => item.productId === productId);
+      if (itemIndex < 0) {
+        throw new ItemNotInDraftException(productId);
+      }
+
+      // Validate product stock
+      const product = await this.productService.getProductById(productId);
+      if (!product) {
+        throw new ProductNotFoundException(productId);
+      }
+
+      if (product.stock < quantity) {
+        throw new InsufficientStockException(product.name);
+      }
+
+      // Update quantity
+      const updatedLineItems = [...draft.lineItems];
+      const item = updatedLineItems[itemIndex];
+      if (item) {
+        item.quantity = quantity;
+      }
+
+      // Calculate total amount
+      const totalAmount = updatedLineItems.reduce(
+        (sum, item) => sum + (item.price * item.quantity),
+        0
+      );
+
+      // Update draft order
+      const result = await OrderModel.findOneAndUpdate(
+        { id: draft.id },
+        {
+          $set: {
+            lineItems: updatedLineItems,
+            totalAmount: totalAmount
+          }
+        },
+        { new: true }
+      );
+
+      if (!result) {
+        throw new OrderNotFoundException(draft.id);
+      }
+
+      return {
+        id: result.id,
+        lineItems: result.lineItems,
+        status: result.status,
+        userId: result.userId,
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId,
+        stripeSessionId: result.stripeSessionId
+      };
+    } catch (error) {
+      if (
+        error instanceof DraftOrderNotFoundException ||
+        error instanceof ItemNotInDraftException ||
+        error instanceof ProductNotFoundException ||
+        error instanceof InsufficientStockException
+      ) {
+        throw error;
+      }
+      throw new DatabaseException('update draft item quantity', error instanceof Error ? error : undefined);
+    }
+  }
+
+  async createCheckoutFromDraft(userId: string, version: string): Promise<{ checkoutUrl: string; orderId: string }> {
     const session = await Database.getInstance().startSession();
 
     try {
-      let newOrder: Order | null = null;
+      let checkoutUrl = '';
+      let orderId = '';
 
       await session.withTransaction(async () => {
-        // Validate products exist and have sufficient stock
-        await this.validateProducts(products);
+        // Get draft order
+        const draft = await this.getUserDraft(userId);
 
-        // Decrement stock for each product
-        await this.decrementProductStock(products);
+        if (draft.lineItems.length === 0) {
+          throw new EmptyDraftException();
+        }
 
-        // Create order
-        const orderDoc = new OrderModel({
-          id: crypto.randomUUID(),
-          products: products,
-          status: OrderStatus.PENDING
+        // Validate all products still exist and have sufficient stock
+        await this.validateDraftStock(draft.lineItems);
+
+        // Reserve stock by decrementing
+        await this.decrementProductStock(draft.lineItems);
+
+        // Update draft to PENDING
+        const result = await OrderModel.findOneAndUpdate(
+          { id: draft.id },
+          { $set: { status: OrderStatus.PENDING } },
+          { new: true, session }
+        );
+
+        if (!result) {
+          throw new OrderNotFoundException(draft.id);
+        }
+
+        orderId = result.id;
+
+        // Build Stripe line items from snapshot data
+        const stripeLineItems = this.buildStripeLineItems(result.lineItems);
+
+        const successUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/cancel`;
+
+        // Create Stripe Checkout Session
+        const stripeSession = await stripe.checkout.sessions.create({
+          payment_method_types: ['card'],
+          line_items: stripeLineItems,
+          mode: 'payment',
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          metadata: {
+            order_id: result.id,
+            user_id: userId
+          }
         });
 
-        await orderDoc.save({ session });
+        if (!stripeSession.url) {
+          throw new CheckoutSessionException('Stripe session URL is null');
+        }
 
-        newOrder = {
-          id: orderDoc.id,
-          products: orderDoc.products,
-          status: orderDoc.status
-        };
+        // Save stripe session ID to order
+        await OrderModel.findOneAndUpdate(
+          { id: result.id },
+          { $set: { stripeSessionId: stripeSession.id } },
+          { session }
+        );
+
+        checkoutUrl = stripeSession.url;
       });
 
-      return newOrder!;
+      return { checkoutUrl, orderId };
     } catch (error) {
-      // Re-throw custom errors as-is
-      if (error instanceof ProductNotFoundException || error instanceof InsufficientStockException) {
+      if (
+        error instanceof EmptyDraftException ||
+        error instanceof DraftOrderNotFoundException ||
+        error instanceof ProductNotFoundException ||
+        error instanceof InsufficientStockException ||
+        error instanceof CheckoutSessionException
+      ) {
         throw error;
       }
-      throw new DatabaseException('create order with transaction', error instanceof Error ? error : undefined);
+      throw new DatabaseException('create checkout from draft', error instanceof Error ? error : undefined);
     } finally {
       await session.endSession();
+    }
+  }
+
+  async createNewDraft(userId: string): Promise<Order> {
+    try {
+      // Create new draft order
+      const draftOrder = new OrderModel({
+        id: crypto.randomUUID(),
+        lineItems: [],
+        status: OrderStatus.DRAFT,
+        userId: userId,
+        totalAmount: 0
+      });
+
+      await draftOrder.save();
+
+      // Update user's draftOrderId reference
+      await UserModel.findOneAndUpdate(
+        { id: userId },
+        { $set: { draftOrderId: draftOrder.id } }
+      );
+
+      return {
+        id: draftOrder.id,
+        lineItems: draftOrder.lineItems,
+        status: draftOrder.status,
+        userId: draftOrder.userId,
+        totalAmount: draftOrder.totalAmount,
+        stripePaymentIntentId: draftOrder.stripePaymentIntentId,
+        stripeSessionId: draftOrder.stripeSessionId
+      };
+    } catch (error) {
+      throw new DatabaseException('create new draft order', error instanceof Error ? error : undefined);
     }
   }
 
@@ -94,16 +383,54 @@ export class OrderService {
       }
       return {
         id: order.id,
-        products: order.products,
-        status: order.status
+        lineItems: order.lineItems,
+        status: order.status,
+        userId: order.userId,
+        totalAmount: order.totalAmount,
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        stripeSessionId: order.stripeSessionId
       };
     } catch (error) {
       throw new DatabaseException('fetch order', error instanceof Error ? error : undefined);
     }
   }
 
+  async savePaymentIntentId(id: string, paymentIntentId: string): Promise<void> {
+    try {
+      await OrderModel.findOneAndUpdate(
+        { id },
+        { $set: { stripePaymentIntentId: paymentIntentId } }
+      );
+    } catch (error) {
+      throw new DatabaseException('save payment intent ID', error instanceof Error ? error : undefined);
+    }
+  }
+
   async updateOrderStatus(id: string, status: OrderStatus): Promise<Order | null> {
     try {
+      // Get current order first
+      const currentOrder = await OrderModel.findOne({ id });
+      if (!currentOrder) {
+        return null;
+      }
+
+      // If changing to CANCELLED status, handle refund and restock
+      if (status === OrderStatus.CANCELLED && currentOrder.status !== OrderStatus.CANCELLED) {
+        // Restock products
+        await this.incrementProductStock(currentOrder.lineItems);
+
+        // Refund payment if order was paid
+        if (currentOrder.status === OrderStatus.PAID || 
+            currentOrder.status === OrderStatus.PROCESSING || 
+            currentOrder.status === OrderStatus.SHIPPED || 
+            currentOrder.status === OrderStatus.DELIVERED) {
+          if (currentOrder.stripePaymentIntentId) {
+            await this.refundPayment(currentOrder.stripePaymentIntentId, id);
+          }
+        }
+      }
+
+      // Update order status
       const result = await OrderModel.findOneAndUpdate(
         { id },
         { $set: { status } },
@@ -116,55 +443,18 @@ export class OrderService {
 
       return {
         id: result.id,
-        products: result.products,
-        status: result.status
+        lineItems: result.lineItems,
+        status: result.status,
+        userId: result.userId,
+        totalAmount: result.totalAmount,
+        stripePaymentIntentId: result.stripePaymentIntentId,
+        stripeSessionId: result.stripeSessionId
       };
     } catch (error) {
-      throw new DatabaseException('update order status', error instanceof Error ? error : undefined);
-    }
-  }
-
-  async createCheckoutSession(orderId: string, version: 'v1' | 'v2' = 'v1'): Promise<string> {
-    const order = await this.getOrderById(orderId);
-    if (!order) {
-      throw new OrderNotFoundException(orderId);
-    }
-
-    if (order.status !== OrderStatus.PENDING) {
-      throw new InvalidOrderStatusException(order.status);
-    }
-
-    // Build line items for Stripe
-    const lineItems = await this.buildStripeLineItems(order.products);
-
-    const successUrl = `${process.env.BASE_URL}/api/${version}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/cancel`;
-
-    try {
-      // Create Stripe Checkout Session with order_id in metadata
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: lineItems,
-        mode: 'payment',
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: {
-          order_id: orderId
-        }
-      });
-
-      if (!session.url) {
-        throw new CheckoutSessionException('Stripe session URL is null');
-      }
-
-      return session.url;
-    } catch (error) {
-      if (error instanceof CheckoutSessionException) {
+      if (error instanceof StripeRefundException) {
         throw error;
       }
-      throw new CheckoutSessionException(
-        error instanceof Error ? error.message : 'Unknown error occurred'
-      );
+      throw new DatabaseException('update order status', error instanceof Error ? error : undefined);
     }
   }
 
@@ -190,7 +480,6 @@ export class OrderService {
     }
   }
 
-  // Update order status with retry logic
   async updateOrderStatusWithRetry(
     orderId: string,
     status: OrderStatus,
@@ -220,13 +509,30 @@ export class OrderService {
     );
   }
 
+  async getAllOrders(): Promise<Order[]> {
+    try {
+      const orders = await OrderModel.find({});
+      return orders.map(order => ({
+        id: order.id,
+        lineItems: order.lineItems,
+        status: order.status,
+        userId: order.userId,
+        totalAmount: order.totalAmount,
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        stripeSessionId: order.stripeSessionId
+      }));
+    } catch (error) {
+      throw new DatabaseException('fetch all orders', error instanceof Error ? error : undefined);
+    }
+  }
+
   // Private helper methods
 
-  private async validateProducts(products: OrderProduct[]): Promise<void> {
-    for (const item of products) {
-      const product = await this.productService.getProductById(item.id);
+  private async validateDraftStock(lineItems: OrderLineItem[]): Promise<void> {
+    for (const item of lineItems) {
+      const product = await this.productService.getProductById(item.productId);
       if (!product) {
-        throw new ProductNotFoundException(item.id);
+        throw new ProductNotFoundException(item.productId);
       }
       if (product.stock < item.quantity) {
         throw new InsufficientStockException(product.name);
@@ -234,36 +540,49 @@ export class OrderService {
     }
   }
 
-  private async decrementProductStock(products: OrderProduct[]): Promise<void> {
-    for (const item of products) {
-      const product = await this.productService.getProductById(item.id);
+  private async decrementProductStock(lineItems: OrderLineItem[]): Promise<void> {
+    for (const item of lineItems) {
+      const product = await this.productService.getProductById(item.productId);
       if (product) {
-        await this.productService.updateProduct(item.id, {
+        await this.productService.updateProduct(item.productId, {
           stock: product.stock - item.quantity
         });
       }
     }
   }
 
-  private async buildStripeLineItems(products: OrderProduct[]): Promise<any[]> {
-    return Promise.all(
-      products.map(async (item) => {
-        const product = await this.productService.getProductById(item.id);
-        if (!product) {
-          throw new ProductNotFoundException(item.id);
-        }
+  private async incrementProductStock(lineItems: OrderLineItem[]): Promise<void> {
+    for (const item of lineItems) {
+      const product = await this.productService.getProductById(item.productId);
+      if (product) {
+        // Add back the quantity to stock
+        await this.productService.updateProduct(item.productId, {
+          stock: product.stock + item.quantity
+        });
+      }
+    }
+  }
 
-        return {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: product.name
-            },
-            unit_amount: product.price
-          },
-          quantity: item.quantity
-        };
-      })
-    );
+  private buildStripeLineItems(lineItems: OrderLineItem[]): any[] {
+    return lineItems.map((item) => ({
+      price_data: {
+        currency: 'usd',
+        product_data: {
+          name: item.name
+        },
+        unit_amount: item.price
+      },
+      quantity: item.quantity
+    }));
+  }
+
+  private async refundPayment(paymentIntentId: string, orderId: string): Promise<void> {
+    try {
+      await stripe.refunds.create({
+        payment_intent: paymentIntentId,
+      });
+    } catch (error) {
+      throw new StripeRefundException(orderId, error instanceof Error ? error : undefined);
+    }
   }
 }

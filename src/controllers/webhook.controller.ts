@@ -12,7 +12,7 @@ export class WebhookController {
     return this.webhookService;
   }
 
-  // POST /api/v2/webhook
+  // POST /api/v1/webhook
   webhookEventHandler = async (req: Request, res: Response): Promise<void> => {
     const sig = req.headers['stripe-signature'];
 
