@@ -92,7 +92,8 @@ export class CronService {
       
       const pendingOrders = await OrderModel.find({
         status: OrderStatus.PENDING,
-        createdAt: { $lt: tenMinutesAgo }
+        createdAt: { $lt: tenMinutesAgo },
+        stripeSessionId: { $exists: true, $ne: null }
       });
 
       if (pendingOrders.length === 0) {
@@ -104,26 +105,25 @@ export class CronService {
 
       for (const order of pendingOrders) {
         try {
-          // Find checkout sessions for this order
-          const sessions = await stripe.checkout.sessions.list({
-            limit: 10
-          });
+          // Directly retrieve the checkout session using stored session ID
+          if (!order.stripeSessionId) {
+            console.warn(`Order ${order.id} has no stripeSessionId, skipping`);
+            continue;
+          }
 
-          const orderSession = sessions.data.find(
-            s => s.metadata?.order_id === order.id
-          );
+          const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
 
-          if (orderSession && orderSession.payment_status === 'paid') {
+          if (session && session.payment_status === 'paid') {
             // Payment was completed but order wasn't updated
             order.status = OrderStatus.PAID;
             await order.save();
             console.log(`Pending order ${order.id} updated to PAID via cron job`);
 
             // Log this recovery
-            const existingEvent = await WebhookEventModel.findOne({ sessionId: orderSession.id });
+            const existingEvent = await WebhookEventModel.findOne({ sessionId: session.id });
             if (!existingEvent) {
               await WebhookEventModel.create({
-                sessionId: orderSession.id,
+                sessionId: session.id,
                 eventType: 'checkout.session.completed',
                 orderId: order.id,
                 processedAt: new Date(),

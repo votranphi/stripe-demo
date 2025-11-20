@@ -25,6 +25,7 @@ export interface Order {
   userId: string;
   totalAmount?: number;
   stripePaymentIntentId?: string;
+  stripeSessionId?: string;
 }
 
 export interface OrderDocument extends Document {
@@ -34,6 +35,7 @@ export interface OrderDocument extends Document {
   userId: string;
   totalAmount?: number;
   stripePaymentIntentId?: string;
+  stripeSessionId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -51,7 +53,8 @@ const orderSchema = new Schema<OrderDocument>({
   status: { type: String, enum: Object.values(OrderStatus), required: true },
   userId: { type: String, required: true },
   totalAmount: { type: Number, required: false },
-  stripePaymentIntentId: { type: String, required: false }
+  stripePaymentIntentId: { type: String, required: false },
+  stripeSessionId: { type: String, required: false }
 }, {
   timestamps: true
 });

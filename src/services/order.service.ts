@@ -40,7 +40,8 @@ export class OrderService {
         status: draft.status,
         userId: draft.userId,
         totalAmount: draft.totalAmount,
-        stripePaymentIntentId: draft.stripePaymentIntentId
+        stripePaymentIntentId: draft.stripePaymentIntentId,
+        stripeSessionId: draft.stripeSessionId
       };
     } catch (error) {
       if (error instanceof DraftOrderNotFoundException) {
@@ -117,7 +118,8 @@ export class OrderService {
         status: result.status,
         userId: result.userId,
         totalAmount: result.totalAmount,
-        stripePaymentIntentId: result.stripePaymentIntentId
+        stripePaymentIntentId: result.stripePaymentIntentId,
+        stripeSessionId: result.stripeSessionId
       };
     } catch (error) {
       if (
@@ -240,7 +242,8 @@ export class OrderService {
         status: result.status,
         userId: result.userId,
         totalAmount: result.totalAmount,
-        stripePaymentIntentId: result.stripePaymentIntentId
+        stripePaymentIntentId: result.stripePaymentIntentId,
+        stripeSessionId: result.stripeSessionId
       };
     } catch (error) {
       if (
@@ -312,6 +315,13 @@ export class OrderService {
           throw new CheckoutSessionException('Stripe session URL is null');
         }
 
+        // Save stripe session ID to order
+        await OrderModel.findOneAndUpdate(
+          { id: result.id },
+          { $set: { stripeSessionId: stripeSession.id } },
+          { session }
+        );
+
         checkoutUrl = stripeSession.url;
       });
 
@@ -357,7 +367,8 @@ export class OrderService {
         status: draftOrder.status,
         userId: draftOrder.userId,
         totalAmount: draftOrder.totalAmount,
-        stripePaymentIntentId: draftOrder.stripePaymentIntentId
+        stripePaymentIntentId: draftOrder.stripePaymentIntentId,
+        stripeSessionId: draftOrder.stripeSessionId
       };
     } catch (error) {
       throw new DatabaseException('create new draft order', error instanceof Error ? error : undefined);
@@ -376,7 +387,8 @@ export class OrderService {
         status: order.status,
         userId: order.userId,
         totalAmount: order.totalAmount,
-        stripePaymentIntentId: order.stripePaymentIntentId
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        stripeSessionId: order.stripeSessionId
       };
     } catch (error) {
       throw new DatabaseException('fetch order', error instanceof Error ? error : undefined);
@@ -435,7 +447,8 @@ export class OrderService {
         status: result.status,
         userId: result.userId,
         totalAmount: result.totalAmount,
-        stripePaymentIntentId: result.stripePaymentIntentId
+        stripePaymentIntentId: result.stripePaymentIntentId,
+        stripeSessionId: result.stripeSessionId
       };
     } catch (error) {
       if (error instanceof StripeRefundException) {
@@ -505,7 +518,8 @@ export class OrderService {
         status: order.status,
         userId: order.userId,
         totalAmount: order.totalAmount,
-        stripePaymentIntentId: order.stripePaymentIntentId
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        stripeSessionId: order.stripeSessionId
       }));
     } catch (error) {
       throw new DatabaseException('fetch all orders', error instanceof Error ? error : undefined);
