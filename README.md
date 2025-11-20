@@ -56,6 +56,10 @@ STRIPE_SECRET_KEY=sk_test...
 STRIPE_WEBHOOK_SECRET=whsec_523d...
 NODE_ENV=development
 
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_EXPIRES_IN=24h
+
 # Database's secrets
 MONGO_ADDRESS=cluster0.0mbmrv7.mongodb.net
 MONGO_USERNAME=admin
@@ -85,36 +89,126 @@ npm run build
 
 ## Usage
 
-### Create a new order
-Send a POST request to `/api/v1/orders` with an example JSON body:
+### 1. Register & Login
 
-```
-{
-    "products": [
+- **Register an account**
+    - `POST /api/v1/auth/register`
+    - Body:
+        ```json
         {
-            "id": "f1e6e674-383a-4f70-ba14-1988bc12d02e",
-            "quantity": 5
-        },
-        {
-            "id": "42895b8f-5f78-43ab-afe6-f635a139fd57",
-            "quantity": 1
+            "email": "user@example.com",
+            "password": "yourpassword"
         }
-    ]
-}
-```
-- Product IDs must match those in MongoDB database.
-- The response will include a Stripe Checkout URL and the new order ID.
+        ```
+    - Returns: User info and token.
 
-### Webhook Handling
-- The webhook endpoint `/api/v1/webhook` will update the order status to `PAID` after successful payment.
-- Idempotency is ensured: each order is only marked as paid once, even if Stripe retries the webhook.
+- **Login**
+    - `POST /api/v1/auth/login`
+    - Body:
+        ```json
+        {
+            "email": "user@example.com",
+            "password": "yourpassword"
+        }
+        ```
+    - Returns: User info and token.
 
-## Notes
-All order and product data is stored in MongoDB. You can POST new product to database using `/api/v1/products` with the following request body:
-```json
-{
-    "name": "Shorts",
-    "price": 100,
-    "stock": 10000
-}
-```
+---
+
+### 2. Product Management
+
+- **Create product** (Admin required)
+    - `POST /api/v1/products`
+    - Body:
+        ```json
+        {
+            "name": "Shorts",
+            "price": 100,
+            "stock": 10000
+        }
+        ```
+
+- **Get all products**
+    - `GET /api/v1/products`
+
+- **Get product details**
+    - `GET /api/v1/products/:id`
+
+- **Update product** (Admin required)
+    - `PUT /api/v1/products/:id`
+
+- **Delete product** (Admin required)
+    - `DELETE /api/v1/products/:id`
+
+---
+
+### 3. Cart Management (Draft Order)
+
+- **View current cart**
+    - `GET /api/v1/orders/draft`
+
+- **Add product to cart**
+    - `POST /api/v1/orders/draft/items`
+    - Body:
+        ```json
+        {
+            "productId": "product_id",
+            "quantity": 2
+        }
+        ```
+
+- **Remove product from cart**
+    - `DELETE /api/v1/orders/draft/items/:productId`
+
+- **Update product quantity in cart**
+    - `PATCH /api/v1/orders/draft/items/:productId`
+    - Body:
+        ```json
+        {
+            "quantity": 3
+        }
+        ```
+
+---
+
+### 4. Stripe Checkout Payment
+
+- **Create checkout session**
+    - `POST /api/v1/orders/checkout/create-session`
+    - Returns: `checkoutUrl` for redirecting to Stripe.
+
+- **Successful payment result**
+    - `GET /api/v1/orders/checkout/success?session_id=...`
+
+- **Cancel payment**
+    - `GET /api/v1/orders/checkout/cancel`
+
+---
+
+### 5. Stripe Webhook
+
+- **Receive webhook from Stripe**
+    - `POST /api/v1/webhook`
+    - Stripe will send events to this endpoint to update order status.
+
+---
+
+### 6. Order Management (Admin)
+
+- **View all orders**
+    - `GET /api/v1/admin/orders`
+
+- **Update order status**
+    - `PUT /api/v1/admin/orders/:id/status`
+    - Body:
+        ```json
+        {
+            "status": "PAID"
+        }
+        ```
+
+---
+
+**Notes:**  
+- All endpoints (except register/login) require Bearer Token (JWT) in the `Authorization` header.
+- `/admin/*` endpoints require the user to have admin privileges.
