@@ -105,7 +105,7 @@ export class CronService {
 
       for (const order of pendingOrders) {
         try {
-          // Directly retrieve the checkout session using stored session ID
+          // Query Stripe API to check actual session status
           if (!order.stripeSessionId) {
             console.warn(`Order ${order.id} has no stripeSessionId, skipping`);
             continue;
@@ -113,10 +113,13 @@ export class CronService {
 
           const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
 
-          if (session && session.payment_status === 'paid') {
+          // Sync local database based on Stripe's actual status
+          if (session.payment_status === 'paid') {
             // Payment was completed but order wasn't updated
-            order.status = OrderStatus.PAID;
-            await order.save();
+            await OrderModel.findOneAndUpdate(
+              { id: order.id },
+              { $set: { status: OrderStatus.PAID } }
+            );
             console.log(`Pending order ${order.id} updated to PAID via cron job`);
 
             // Log this recovery
@@ -130,6 +133,44 @@ export class CronService {
                 status: 'success',
                 errorMessage: 'Recovered by cron job - no webhook received'
               });
+            }
+          } else if (session.status === 'expired') {
+            // Session expired, cancel the order
+            await OrderModel.findOneAndUpdate(
+              { id: order.id },
+              { $set: { status: OrderStatus.CANCELLED } }
+            );
+            console.log(`Pending order ${order.id} marked as CANCELLED (session expired) via cron job`);
+
+            // Restock the items
+            const orderService = new (await import('./order.service.js')).OrderService();
+            await orderService.updateOrderStatus(order.id, OrderStatus.CANCELLED);
+            
+            // Log the event
+            await WebhookEventModel.create({
+              sessionId: session.id,
+              eventType: 'checkout.session.expired',
+              orderId: order.id,
+              processedAt: new Date(),
+              status: 'success',
+              errorMessage: 'Recovered by cron job - session expired'
+            });
+          } else if (session.payment_status === 'unpaid') {
+            // Check if session is too old (e.g., more than 24 hours)
+            const sessionCreatedAt = new Date(session.created * 1000);
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            
+            if (sessionCreatedAt < twentyFourHoursAgo) {
+              // Cancel old unpaid orders
+              await OrderModel.findOneAndUpdate(
+                { id: order.id },
+                { $set: { status: OrderStatus.CANCELLED } }
+              );
+              console.log(`Pending order ${order.id} marked as CANCELLED (unpaid too long) via cron job`);
+              
+              // Restock the items
+              const orderService = new (await import('./order.service.js')).OrderService();
+              await orderService.updateOrderStatus(order.id, OrderStatus.CANCELLED);
             }
           }
         } catch (error) {

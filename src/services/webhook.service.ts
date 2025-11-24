@@ -1,6 +1,6 @@
 import { OrderService } from './order.service.js';
 import stripe from '../config/stripe.js';
-import { OrderStatus } from '../models/order.model.js';
+import { OrderModel, OrderStatus } from '../models/order.model.js';
 import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
 import Stripe from 'stripe';
@@ -32,10 +32,21 @@ export class WebhookService {
 
     console.log(`Received webhook event: ${event.type}`);
 
+    // Save webhook event IMMEDIATELY after verification, before processing
+    await this.saveWebhookEvent(event);
+
     // Handle specific events
     switch (event.type) {
       case 'checkout.session.completed':
         await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+        break;
+      
+      case 'checkout.session.expired':
+        await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
+        break;
+      
+      case 'payment_intent.payment_failed':
+        await this.handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
         break;
       
       // Add more event handlers as needed
@@ -163,6 +174,104 @@ export class WebhookService {
     } catch (error) {
       console.error('Failed to log webhook event:', error);
       // Don't throw error here to avoid blocking the webhook processing
+    }
+  }
+
+  private async saveWebhookEvent(event: Stripe.Event): Promise<void> {
+    try {
+      const sessionId = (event.data.object as any).id || event.id;
+      const orderId = (event.data.object as any).metadata?.order_id;
+
+      const webhookEvent = new WebhookEventModel({
+        sessionId,
+        eventType: event.type,
+        orderId,
+        processedAt: new Date(),
+        status: 'pending',
+        errorMessage: undefined
+      });
+
+      await webhookEvent.save();
+      console.log(`Webhook event ${event.type} saved for session ${sessionId}`);
+    } catch (error) {
+      console.error('Failed to save webhook event:', error);
+      // Don't throw to avoid blocking webhook processing
+    }
+  }
+
+  private async handleCheckoutSessionExpired(session: Stripe.Checkout.Session): Promise<void> {
+    const orderId = session.metadata?.order_id;
+
+    if (!orderId) {
+      console.error('Order ID not found in expired session metadata');
+      return;
+    }
+
+    try {
+      const order = await this.orderService.getOrderById(orderId);
+      
+      if (!order) {
+        console.error(`Order ${orderId} not found`);
+        return;
+      }
+
+      // Only update if order is still pending
+      if (order.status === OrderStatus.PENDING) {
+        await this.orderService.updateOrderStatus(orderId, OrderStatus.CANCELLED);
+        console.log(`Order ${orderId} marked as CANCELLED due to session expiration`);
+        
+        // Update webhook event status
+        await WebhookEventModel.findOneAndUpdate(
+          { sessionId: session.id, eventType: 'checkout.session.expired' },
+          { status: 'success' }
+        );
+      }
+    } catch (error) {
+      console.error('Error handling checkout.session.expired:', error);
+      
+      // Update webhook event status to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { sessionId: session.id, eventType: 'checkout.session.expired' },
+        { 
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        }
+      );
+    }
+  }
+
+  private async handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    try {
+      // Find order by payment intent ID
+      const order = await OrderModel.findOne({ stripePaymentIntentId: paymentIntent.id });
+
+      if (!order) {
+        console.log(`No order found for payment intent ${paymentIntent.id}`);
+        return;
+      }
+
+      // Only update if order is still pending
+      if (order.status === OrderStatus.PENDING) {
+        await this.orderService.updateOrderStatus(order.id, OrderStatus.CANCELLED);
+        console.log(`Order ${order.id} marked as CANCELLED due to payment failure`);
+        
+        // Update webhook event status
+        await WebhookEventModel.findOneAndUpdate(
+          { sessionId: paymentIntent.id, eventType: 'payment_intent.payment_failed' },
+          { status: 'success', orderId: order.id }
+        );
+      }
+    } catch (error) {
+      console.error('Error handling payment_intent.payment_failed:', error);
+      
+      // Update webhook event status to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { sessionId: paymentIntent.id, eventType: 'payment_intent.payment_failed' },
+        { 
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        }
+      );
     }
   }
 }
