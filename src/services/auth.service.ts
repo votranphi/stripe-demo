@@ -9,24 +9,6 @@ import {
   JWTSecretMissingException
 } from '../errors/CustomError.js';
 
-export interface RegisterInput {
-  email: string;
-  password: string;
-  role?: UserRole;
-}
-
-export interface LoginInput {
-  email: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  userId: string;
-  email: string;
-  role: UserRole;
-  token: string;
-}
-
 export class AuthService {
   private readonly SALT_ROUNDS = 10;
   private readonly JWT_SECRET: string;
@@ -41,16 +23,16 @@ export class AuthService {
     }
   }
 
-  async register(input: RegisterInput): Promise<AuthResponse> {
+  async register(email: string, password: string, role?: UserRole): Promise<{ userId: string; email: string; role: UserRole; token: string }> {
     try {
       // Check if user already exists
-      const existingUser = await UserModel.findOne({ email: input.email });
+      const existingUser = await UserModel.findOne({ email });
       if (existingUser) {
-        throw new UserAlreadyExistsException(input.email);
+        throw new UserAlreadyExistsException(email);
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(input.password, this.SALT_ROUNDS);
+      const hashedPassword = await bcrypt.hash(password, this.SALT_ROUNDS);
 
       // Create user ID
       const userId = crypto.randomUUID();
@@ -69,9 +51,9 @@ export class AuthService {
       // Create user with reference to draft order
       const userDoc = new UserModel({
         id: userId,
-        email: input.email,
+        email,
         password: hashedPassword,
-        role: input.role || UserRole.USER,
+        role: role || UserRole.USER,
         draftOrderId: draftOrder.id
       });
 
@@ -94,16 +76,16 @@ export class AuthService {
     }
   }
 
-  async login(input: LoginInput): Promise<AuthResponse> {
+  async login(email: string, password: string): Promise<{ userId: string; email: string; role: UserRole; token: string }> {
     try {
       // Find user by email
-      const user = await UserModel.findOne({ email: input.email });
+      const user = await UserModel.findOne({ email });
       if (!user) {
         throw new InvalidCredentialsException();
       }
 
       // Verify password
-      const isPasswordValid = await bcrypt.compare(input.password, user.password);
+      const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
         throw new InvalidCredentialsException();
       }
