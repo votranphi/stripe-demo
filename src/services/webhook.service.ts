@@ -37,25 +37,27 @@ export class WebhookService {
 
     console.log(`Received webhook event: ${event.type}`);
 
-    // Save webhook event IMMEDIATELY after verification, before processing
-    await this.saveWebhookEvent(event);
-
     // Handle specific events
     switch (event.type) {
       case 'checkout.session.completed':
+        // Save only handled event to DB
+        await this.saveWebhookEvent(event);
         await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
         break;
       
       case 'checkout.session.expired':
+        await this.saveWebhookEvent(event);
         await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
         break;
       
       case 'payment_intent.payment_failed':
+        await this.saveWebhookEvent(event);
         await this.handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
         break;
       
       // Add more event handlers as needed
       default:
+        // Log unhandled event, do NOT save to DB
         console.log(`Unhandled event type: ${event.type}`);
     }
   }
