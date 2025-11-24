@@ -27,7 +27,6 @@
     "mongoose": "^8.19.3",
     "node-cron": "^4.2.1",
     "stripe": "^19.3.1",
-    "undici-types": "^7.16.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {
