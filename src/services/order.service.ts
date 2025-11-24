@@ -534,10 +534,7 @@ export class OrderService {
     }
   }
 
-  /**
-   * Processes expired or pending orders that need status updates
-   * This is called by CronService to handle order cleanup
-   */
+  // Processes expired or pending orders that need status updates. This is called by CronService to handle order cleanup
   async processExpiredOrders(): Promise<void> {
     try {
       // Find orders that are still pending for more than 10 minutes
@@ -588,10 +585,7 @@ export class OrderService {
     }
   }
 
-  /**
-   * Restocks items for a cancelled order
-   * @param orderId - The order ID to restock
-   */
+  // Restocks items for a cancelled order
   async restockOrder(orderId: string): Promise<void> {
     try {
       const order = await OrderModel.findOne({ id: orderId });

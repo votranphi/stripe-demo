@@ -7,11 +7,6 @@ import {
   WebhookSignatureException
 } from '../errors/CustomError.js';
 
-/**
- * PaymentService handles all Stripe-specific payment operations.
- * This service encapsulates payment gateway interactions, providing a clean
- * abstraction layer between the business logic and Stripe SDK.
- */
 export class PaymentService {
   private readonly stripe: Stripe;
 
@@ -19,15 +14,7 @@ export class PaymentService {
     this.stripe = stripe;
   }
 
-  /**
-   * Creates a Stripe checkout session for the given order
-   * @param lineItems - Array of order line items
-   * @param orderId - The order ID to include in metadata
-   * @param userId - The user ID to include in metadata
-   * @param successUrl - URL to redirect after successful payment
-   * @param cancelUrl - URL to redirect after cancelled payment
-   * @returns The checkout session with URL
-   */
+  // Creates a Stripe checkout session for the given order
   async createCheckoutSession(
     lineItems: OrderLineItem[],
     orderId: string,
@@ -68,11 +55,7 @@ export class PaymentService {
     }
   }
 
-  /**
-   * Retrieves a checkout session from Stripe
-   * @param sessionId - The Stripe session ID
-   * @returns The checkout session
-   */
+  // Retrieves a checkout session from Stripe
   async retrieveCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
     try {
       return await this.stripe.checkout.sessions.retrieve(sessionId);
@@ -83,11 +66,7 @@ export class PaymentService {
     }
   }
 
-  /**
-   * Creates a refund for a payment intent
-   * @param paymentIntentId - The Stripe payment intent ID
-   * @param orderId - The order ID for error reporting
-   */
+  // Creates a refund for a payment intent
   async createRefund(paymentIntentId: string, orderId: string): Promise<void> {
     try {
       await this.stripe.refunds.create({
@@ -98,13 +77,7 @@ export class PaymentService {
     }
   }
 
-  /**
-   * Verifies a Stripe webhook signature and constructs the event
-   * @param payload - The raw request body
-   * @param signature - The Stripe signature header
-   * @param webhookSecret - The webhook secret from environment
-   * @returns The verified Stripe event
-   */
+  // Verifies a Stripe webhook signature and constructs the event
   verifyWebhookSignature(
     payload: Buffer,
     signature: string,
@@ -118,11 +91,7 @@ export class PaymentService {
     }
   }
 
-  /**
-   * Builds Stripe line items from order line items
-   * @param lineItems - Array of order line items
-   * @returns Array of Stripe line items
-   */
+  // Builds Stripe line items from order line items
   private buildStripeLineItems(lineItems: OrderLineItem[]): Stripe.Checkout.SessionCreateParams.LineItem[] {
     return lineItems.map((item) => ({
       price_data: {
