@@ -1,7 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { UserModel, UserRole } from '../models/user.model.js';
-import { OrderModel, OrderStatus } from '../models/order.model.js';
 import {
   UserAlreadyExistsException,
   InvalidCredentialsException,

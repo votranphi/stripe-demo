@@ -1,4 +1,3 @@
-// ...existing code...
 import { Product, ProductModel } from '../models/product.model.js';
 import {
   DatabaseException,
