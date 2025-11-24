@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { OrderService } from '../services/order.service.js';
 import { AddItemDTO, UpdateItemDTO, UpdateOrderStatusDTO } from '../dtos/order.dto.js';
 import { asyncHandler } from '../middlewares/error.middleware.js';

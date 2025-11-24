@@ -585,24 +585,6 @@ export class OrderService {
     }
   }
 
-  // Restocks items for a cancelled order
-  async restockOrder(orderId: string): Promise<void> {
-    try {
-      const order = await OrderModel.findOne({ id: orderId });
-      if (!order) {
-        throw new OrderNotFoundException(orderId);
-      }
-
-      await this.incrementProductStock(order.lineItems);
-      console.log(`Order ${orderId} items restocked successfully`);
-    } catch (error) {
-      if (error instanceof OrderNotFoundException) {
-        throw error;
-      }
-      throw new DatabaseException('restock order', error instanceof Error ? error : undefined);
-    }
-  }
-
   // Private helper methods
 
   private async validateDraftStock(lineItems: OrderLineItem[]): Promise<void> {
