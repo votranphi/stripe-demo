@@ -1,6 +1,6 @@
 import { OrderService } from './order.service.js';
 import { PaymentService } from './payment.service.js';
-import { OrderModel, OrderStatus } from '../models/order.model.js';
+import { OrderStatus } from '../models/order.model.js';
 import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
 import Stripe from 'stripe';
