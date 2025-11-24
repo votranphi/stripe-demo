@@ -10,12 +10,6 @@ export class CustomError extends Error {
 }
 
 // 400 Errors
-export class ValidationException extends CustomError {
-  constructor(message: string) {
-    super(message, 400);
-  }
-}
-
 export class WebhookSignatureException extends CustomError {
   constructor() {
     super('Webhook signature verification failed', 400);
@@ -83,18 +77,6 @@ export class InsufficientStockException extends CustomError {
 export class DuplicateProcessingException extends CustomError {
   constructor(message: string) {
     super(message, 409);
-  }
-}
-
-export class InvalidOrderStatusException extends CustomError {
-  constructor(currentStatus: string) {
-    super(`Order is not in PENDING status. Current status: ${currentStatus}`, 409);
-  }
-}
-
-export class InvalidDraftOperationException extends CustomError {
-  constructor(message: string) {
-    super(`Invalid draft operation: ${message}`, 409);
   }
 }
 

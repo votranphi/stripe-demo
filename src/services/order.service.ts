@@ -2,7 +2,7 @@ import Database from '../config/database.js';
 import { Order, OrderModel, OrderStatus, OrderLineItem } from '../models/order.model.js';
 import { UserModel } from '../models/user.model.js';
 import { ProductService } from './product.service.js';
-import stripe from '../config/stripe.js';
+import { PaymentService } from './payment.service.js';
 import {
   ProductNotFoundException,
   InsufficientStockException,
@@ -12,26 +12,37 @@ import {
   EmptyDraftException,
   DatabaseException,
   CheckoutSessionException,
-  StripeRefundException,
 } from '../errors/CustomError.js';
 
 export class OrderService {
-  private productService: ProductService;
+  private readonly productService: ProductService;
+  private readonly paymentService: PaymentService;
 
-  constructor() {
-    this.productService = new ProductService();
+  constructor(
+    productService?: ProductService,
+    paymentService?: PaymentService
+  ) {
+    this.productService = productService || new ProductService();
+    this.paymentService = paymentService || new PaymentService();
   }
 
   async getUserDraft(userId: string): Promise<Order> {
     try {
       const user = await UserModel.findOne({ id: userId });
-      if (!user || !user.draftOrderId) {
+      if (!user) {
         throw new DraftOrderNotFoundException(userId);
       }
 
+      // Check if user has a draft order ID
+      if (!user.draftOrderId) {
+        // Lazy creation: create draft order now
+        return await this.createNewDraft(userId);
+      }
+
       const draft = await OrderModel.findOne({ id: user.draftOrderId });
-      if (!draft) {
-        throw new DraftOrderNotFoundException(userId);
+      if (!draft || draft.status !== OrderStatus.DRAFT) {
+        // Create draft order now if couldn't find the DRAFT order
+        return await this.createNewDraft(userId);
       }
 
       return {
@@ -292,37 +303,26 @@ export class OrderService {
 
         orderId = result.id;
 
-        // Build Stripe line items from snapshot data
-        const stripeLineItems = this.buildStripeLineItems(result.lineItems);
-
         const successUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/cancel`;
 
-        // Create Stripe Checkout Session
-        const stripeSession = await stripe.checkout.sessions.create({
-          payment_method_types: ['card'],
-          line_items: stripeLineItems,
-          mode: 'payment',
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-          metadata: {
-            order_id: result.id,
-            user_id: userId
-          }
-        });
-
-        if (!stripeSession.url) {
-          throw new CheckoutSessionException('Stripe session URL is null');
-        }
+        // Create Stripe Checkout Session via PaymentService
+        const { sessionId, url } = await this.paymentService.createCheckoutSession(
+          result.lineItems,
+          result.id,
+          userId,
+          successUrl,
+          cancelUrl
+        );
 
         // Save stripe session ID to order
         await OrderModel.findOneAndUpdate(
           { id: result.id },
-          { $set: { stripeSessionId: stripeSession.id } },
+          { $set: { stripeSessionId: sessionId } },
           { session }
         );
 
-        checkoutUrl = stripeSession.url;
+        checkoutUrl = url;
       });
 
       return { checkoutUrl, orderId };
@@ -420,12 +420,12 @@ export class OrderService {
         await this.incrementProductStock(currentOrder.lineItems);
 
         // Refund payment if order was paid
-        if (currentOrder.status === OrderStatus.PAID || 
-            currentOrder.status === OrderStatus.PROCESSING || 
-            currentOrder.status === OrderStatus.SHIPPED || 
-            currentOrder.status === OrderStatus.DELIVERED) {
+        if (currentOrder.status === OrderStatus.PAID ||
+          currentOrder.status === OrderStatus.PROCESSING ||
+          currentOrder.status === OrderStatus.SHIPPED ||
+          currentOrder.status === OrderStatus.DELIVERED) {
           if (currentOrder.stripePaymentIntentId) {
-            await this.refundPayment(currentOrder.stripePaymentIntentId, id);
+            await this.paymentService.createRefund(currentOrder.stripePaymentIntentId, id);
           }
         }
       }
@@ -451,16 +451,13 @@ export class OrderService {
         stripeSessionId: result.stripeSessionId
       };
     } catch (error) {
-      if (error instanceof StripeRefundException) {
-        throw error;
-      }
       throw new DatabaseException('update order status', error instanceof Error ? error : undefined);
     }
   }
 
   async retrieveCheckoutSession(sessionId: string): Promise<{ orderId: string; session: any }> {
     try {
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const session = await this.paymentService.retrieveCheckoutSession(sessionId);
 
       if (!session.metadata?.order_id) {
         throw new CheckoutSessionException('Order ID not found in session metadata');
@@ -509,20 +506,82 @@ export class OrderService {
     );
   }
 
-  async getAllOrders(): Promise<Order[]> {
+  async getAllOrders(page: number = 1, limit: number = 10): Promise<{ orders: Order[]; total: number; page: number; totalPages: number }> {
     try {
-      const orders = await OrderModel.find({});
-      return orders.map(order => ({
-        id: order.id,
-        lineItems: order.lineItems,
-        status: order.status,
-        userId: order.userId,
-        totalAmount: order.totalAmount,
-        stripePaymentIntentId: order.stripePaymentIntentId,
-        stripeSessionId: order.stripeSessionId
-      }));
+      const skip = (page - 1) * limit;
+      const total = await OrderModel.countDocuments({});
+      const orders = await OrderModel.find({})
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      return {
+        orders: orders.map(order => ({
+          id: order.id,
+          lineItems: order.lineItems,
+          status: order.status,
+          userId: order.userId,
+          totalAmount: order.totalAmount,
+          stripePaymentIntentId: order.stripePaymentIntentId,
+          stripeSessionId: order.stripeSessionId
+        })),
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+      };
     } catch (error) {
       throw new DatabaseException('fetch all orders', error instanceof Error ? error : undefined);
+    }
+  }
+
+  // Processes expired or pending orders that need status updates. This is called by CronService to handle order cleanup
+  async processExpiredOrders(): Promise<void> {
+    try {
+      // Find orders that are still pending for more than 10 minutes
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+      const pendingOrders = await OrderModel.find({
+        status: OrderStatus.PENDING,
+        createdAt: { $lt: tenMinutesAgo },
+        stripeSessionId: { $exists: true, $ne: null }
+      });
+
+      console.log(`Processing ${pendingOrders.length} expired pending orders...`);
+
+      for (const order of pendingOrders) {
+        try {
+          if (!order.stripeSessionId) {
+            console.warn(`Order ${order.id} has no stripeSessionId, skipping`);
+            continue;
+          }
+
+          // Verify session status with Stripe
+          const session = await this.paymentService.retrieveCheckoutSession(order.stripeSessionId);
+
+          // Sync order status based on Stripe's session status
+          if (session.payment_status === 'paid' && order.status === OrderStatus.PENDING) {
+            await this.updateOrderStatus(order.id, OrderStatus.PAID);
+            console.log(`Expired order ${order.id} updated to PAID via cron job`);
+          } else if (session.status === 'expired' && order.status === OrderStatus.PENDING) {
+            await this.updateOrderStatus(order.id, OrderStatus.CANCELLED);
+            console.log(`Expired order ${order.id} marked as CANCELLED via cron job`);
+          } else if (session.payment_status === 'unpaid') {
+            // Check if session is too old (e.g., more than 24 hours)
+            const sessionCreatedAt = new Date(session.created * 1000);
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+            if (sessionCreatedAt < twentyFourHoursAgo && order.status === OrderStatus.PENDING) {
+              await this.updateOrderStatus(order.id, OrderStatus.CANCELLED);
+              console.log(`Expired order ${order.id} marked as CANCELLED (unpaid too long) via cron job`);
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing expired order ${order.id}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing expired orders:', error);
+      throw new DatabaseException('process expired orders', error instanceof Error ? error : undefined);
     }
   }
 
@@ -560,29 +619,6 @@ export class OrderService {
           stock: product.stock + item.quantity
         });
       }
-    }
-  }
-
-  private buildStripeLineItems(lineItems: OrderLineItem[]): any[] {
-    return lineItems.map((item) => ({
-      price_data: {
-        currency: 'usd',
-        product_data: {
-          name: item.name
-        },
-        unit_amount: item.price
-      },
-      quantity: item.quantity
-    }));
-  }
-
-  private async refundPayment(paymentIntentId: string, orderId: string): Promise<void> {
-    try {
-      await stripe.refunds.create({
-        payment_intent: paymentIntentId,
-      });
-    } catch (error) {
-      throw new StripeRefundException(orderId, error instanceof Error ? error : undefined);
     }
   }
 }
