@@ -91,12 +91,17 @@ export class WebhookService {
 
     try {
       await dbSession.withTransaction(async () => {
-        // Check Idempotency
+        // Check Idempotency - only throw error if event has been successfully proccessed
         const existingEvent = await WebhookEventModel.findOne({ sessionId: session.id }).session(dbSession);
         
-        if (existingEvent) {
-          console.log(`Session ${session.id} already processed at ${existingEvent.processedAt}, skipping...`);
+        if (existingEvent && existingEvent.status === 'success') {
+          console.log(`Session ${session.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Session ${session.id} has already been processed`);
+        }
+
+        // If existingEvent and the status is 'pending' or 'failed', accept retry logic
+        if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
+          console.log(`Session ${session.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Get order within transaction
@@ -109,8 +114,17 @@ export class WebhookService {
         // Only process if order is still PENDING
         if (order.status !== OrderStatus.PENDING) {
           console.log(`Order ${orderId} is already in ${order.status} status, skipping...`);
-          // Still log as success since this is not an error condition
-          await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'success', `Order already in ${order.status} status`);
+          
+          // Update webhool event to success because the order has been proccessed
+          await WebhookEventModel.findOneAndUpdate(
+            { sessionId: session.id },
+            {
+              status: 'success',
+              processedAt: new Date(),
+              errorMessage: `Order already in ${order.status} status`
+            },
+            { session: dbSession }
+          );
           return;
         }
 
@@ -131,27 +145,37 @@ export class WebhookService {
         await this.orderService.createNewDraft(userId);
         console.log(`New draft order created for user ${userId}`);
 
-        // Mark session as processed in database
-        const webhookEvent = new WebhookEventModel({
-          sessionId: session.id,
-          eventType: 'checkout.session.completed',
-          orderId: orderId,
-          processedAt: new Date(),
-          status: 'success'
-        });
-        await webhookEvent.save({ session: dbSession });
-        console.log(`Webhook event logged for session ${session.id}`);
+        // Update webhook event to success (rather than create a new one)
+        await WebhookEventModel.findOneAndUpdate(
+          { sessionId: session.id },
+          {
+            status: 'success',
+            processedAt: new Date(),
+            orderId: orderId,
+            eventType: 'checkout.session.completed',
+            errorMessage: undefined
+          },
+          { 
+            upsert: true, // Create a new one if it's never existed (just in case saveWebhookEvent failed)
+            session: dbSession 
+          }
+        );
+        console.log(`Webhook event updated to success for session ${session.id}`);
       });
     } catch (error) {
       console.error('Error handling checkout.session.completed:', error);
       
-      // Log webhook event failure outside transaction
-      await this.logWebhookEvent(
-        session.id, 
-        'checkout.session.completed', 
-        orderId, 
-        'failed', 
-        error instanceof Error ? error.message : 'Unknown error'
+      // Update webhook event to failed (rather than create a new one)
+      await WebhookEventModel.findOneAndUpdate(
+        { sessionId: session.id },
+        {
+          status: 'failed',
+          processedAt: new Date(),
+          orderId: orderId,
+          eventType: 'checkout.session.completed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { upsert: true } // Create a new one if it's never existed
       );
       
       throw error;
