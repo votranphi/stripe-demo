@@ -19,7 +19,7 @@ export class AuthController {
     // Validate request body using DTO
     const dto = new RegisterDTO(req.body);
     // Register user
-    const result = await this.getAuthService().register(dto);
+    const result = await this.getAuthService().register(dto.email, dto.password, dto.role);
 
     res.status(201).json({
       success: true,
@@ -38,7 +38,7 @@ export class AuthController {
     // Validate request body using DTO
     const dto = new LoginDTO(req.body);
     // Login user
-    const result = await this.getAuthService().login(dto);
+    const result = await this.getAuthService().login(dto.email, dto.password);
 
     res.status(200).json({
       success: true,

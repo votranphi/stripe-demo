@@ -1,4 +1,3 @@
-// ...existing code...
 import { Product, ProductModel } from '../models/product.model.js';
 import {
   DatabaseException,
@@ -7,15 +6,26 @@ import {
 } from '../errors/CustomError.js';
 
 export class ProductService {
-  async getAllProducts(): Promise<Product[]> {
+  async getAllProducts(page: number = 1, limit: number = 10): Promise<{ products: Product[]; total: number; page: number; totalPages: number }> {
     try {
-      const products = await ProductModel.find({});
-      return products.map(product => ({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        stock: product.stock
-      }));
+      const skip = (page - 1) * limit;
+      const total = await ProductModel.countDocuments({});
+      const products = await ProductModel.find({})
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+      
+      return {
+        products: products.map(product => ({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          stock: product.stock
+        })),
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+      };
     } catch (error) {
       throw new DatabaseException('fetch products', error instanceof Error ? error : undefined);
     }

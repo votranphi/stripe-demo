@@ -17,10 +17,19 @@ export class ProductController {
 
   // GET /api/v1/products
   getAllProducts = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const products = await this.getProductService().getAllProducts();
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    
+    const result = await this.getProductService().getAllProducts(page, limit);
     res.status(200).json({
       success: true,
-      data: products
+      data: result.products,
+      pagination: {
+        page: result.page,
+        limit: limit,
+        total: result.total,
+        totalPages: result.totalPages
+      }
     });
   });
 

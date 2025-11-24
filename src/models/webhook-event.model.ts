@@ -5,7 +5,7 @@ export interface WebhookEvent {
   eventType: string;
   orderId?: string;
   processedAt: Date;
-  status: 'success' | 'failed';
+  status: 'success' | 'failed' | 'pending';
   errorMessage?: string;
 }
 
@@ -14,7 +14,7 @@ export interface WebhookEventDocument extends Document {
   eventType: string;
   orderId?: string;
   processedAt: Date;
-  status: 'success' | 'failed';
+  status: 'success' | 'failed' | 'pending';
   errorMessage?: string;
 }
 
@@ -23,7 +23,7 @@ const webhookEventSchema = new Schema<WebhookEventDocument>({
   eventType: { type: String, required: true },
   orderId: { type: String },
   processedAt: { type: Date, required: true, default: Date.now },
-  status: { type: String, enum: ['success', 'failed'], required: true },
+  status: { type: String, enum: ['success', 'failed', 'pending'], required: true },
   errorMessage: { type: String }
 });
 

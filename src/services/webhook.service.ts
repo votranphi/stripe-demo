@@ -1,5 +1,5 @@
 import { OrderService } from './order.service.js';
-import stripe from '../config/stripe.js';
+import { PaymentService } from './payment.service.js';
 import { OrderStatus } from '../models/order.model.js';
 import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
@@ -7,10 +7,15 @@ import Stripe from 'stripe';
 import Database from '../config/database.js';
 
 export class WebhookService {
-  private orderService: OrderService;
+  private readonly orderService: OrderService;
+  private readonly paymentService: PaymentService;
 
-  constructor() {
-    this.orderService = new OrderService();
+  constructor(
+    orderService?: OrderService,
+    paymentService?: PaymentService
+  ) {
+    this.orderService = orderService || new OrderService();
+    this.paymentService = paymentService || new PaymentService();
   }
 
   async handleWebhookEvent(payload: Buffer, signature: string): Promise<void> {
@@ -23,8 +28,8 @@ export class WebhookService {
     let event: Stripe.Event;
 
     try {
-      // Verify webhook signature
-      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+      // Verify webhook signature using PaymentService
+      event = this.paymentService.verifyWebhookSignature(payload, signature, webhookSecret);
     } catch (error) {
       console.error('Webhook signature verification failed:', error);
       throw new WebhookSignatureException();
@@ -35,11 +40,19 @@ export class WebhookService {
     // Handle specific events
     switch (event.type) {
       case 'checkout.session.completed':
+        // Save only handled event to DB
+        await this.saveWebhookEvent(event);
         await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+        break;
+      
+      case 'checkout.session.expired':
+        await this.saveWebhookEvent(event);
+        await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
         break;
       
       // Add more event handlers as needed
       default:
+        // Log unhandled event, do NOT save to DB
         console.log(`Unhandled event type: ${event.type}`);
     }
   }
@@ -73,12 +86,17 @@ export class WebhookService {
 
     try {
       await dbSession.withTransaction(async () => {
-        // Check Idempotency
+        // Check Idempotency - only throw error if event has been successfully proccessed
         const existingEvent = await WebhookEventModel.findOne({ sessionId: session.id }).session(dbSession);
         
-        if (existingEvent) {
-          console.log(`Session ${session.id} already processed at ${existingEvent.processedAt}, skipping...`);
+        if (existingEvent && existingEvent.status === 'success') {
+          console.log(`Session ${session.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Session ${session.id} has already been processed`);
+        }
+
+        // If existingEvent and the status is 'pending' or 'failed', accept retry logic
+        if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
+          console.log(`Session ${session.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Get order within transaction
@@ -91,8 +109,17 @@ export class WebhookService {
         // Only process if order is still PENDING
         if (order.status !== OrderStatus.PENDING) {
           console.log(`Order ${orderId} is already in ${order.status} status, skipping...`);
-          // Still log as success since this is not an error condition
-          await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'success', `Order already in ${order.status} status`);
+          
+          // Update webhool event to success because the order has been proccessed
+          await WebhookEventModel.findOneAndUpdate(
+            { sessionId: session.id },
+            {
+              status: 'success',
+              processedAt: new Date(),
+              errorMessage: `Order already in ${order.status} status`
+            },
+            { session: dbSession }
+          );
           return;
         }
 
@@ -113,27 +140,37 @@ export class WebhookService {
         await this.orderService.createNewDraft(userId);
         console.log(`New draft order created for user ${userId}`);
 
-        // Mark session as processed in database
-        const webhookEvent = new WebhookEventModel({
-          sessionId: session.id,
-          eventType: 'checkout.session.completed',
-          orderId: orderId,
-          processedAt: new Date(),
-          status: 'success'
-        });
-        await webhookEvent.save({ session: dbSession });
-        console.log(`Webhook event logged for session ${session.id}`);
+        // Update webhook event to success (rather than create a new one)
+        await WebhookEventModel.findOneAndUpdate(
+          { sessionId: session.id },
+          {
+            status: 'success',
+            processedAt: new Date(),
+            orderId: orderId,
+            eventType: 'checkout.session.completed',
+            errorMessage: undefined
+          },
+          { 
+            upsert: true, // Create a new one if it's never existed (just in case saveWebhookEvent failed)
+            session: dbSession 
+          }
+        );
+        console.log(`Webhook event updated to success for session ${session.id}`);
       });
     } catch (error) {
       console.error('Error handling checkout.session.completed:', error);
       
-      // Log webhook event failure outside transaction
-      await this.logWebhookEvent(
-        session.id, 
-        'checkout.session.completed', 
-        orderId, 
-        'failed', 
-        error instanceof Error ? error.message : 'Unknown error'
+      // Update webhook event to failed (rather than create a new one)
+      await WebhookEventModel.findOneAndUpdate(
+        { sessionId: session.id },
+        {
+          status: 'failed',
+          processedAt: new Date(),
+          orderId: orderId,
+          eventType: 'checkout.session.completed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { upsert: true } // Create a new one if it's never existed
       );
       
       throw error;
@@ -163,6 +200,69 @@ export class WebhookService {
     } catch (error) {
       console.error('Failed to log webhook event:', error);
       // Don't throw error here to avoid blocking the webhook processing
+    }
+  }
+
+  private async saveWebhookEvent(event: Stripe.Event): Promise<void> {
+    try {
+      const sessionId = (event.data.object as any).id || event.id;
+      const orderId = (event.data.object as any).metadata?.order_id;
+
+      const webhookEvent = new WebhookEventModel({
+        sessionId,
+        eventType: event.type,
+        orderId,
+        processedAt: new Date(),
+        status: 'pending',
+        errorMessage: undefined
+      });
+
+      await webhookEvent.save();
+      console.log(`Webhook event ${event.type} saved for session ${sessionId}`);
+    } catch (error) {
+      console.error('Failed to save webhook event:', error);
+      // Don't throw to avoid blocking webhook processing
+    }
+  }
+
+  private async handleCheckoutSessionExpired(session: Stripe.Checkout.Session): Promise<void> {
+    const orderId = session.metadata?.order_id;
+
+    if (!orderId) {
+      console.error('Order ID not found in expired session metadata');
+      return;
+    }
+
+    try {
+      const order = await this.orderService.getOrderById(orderId);
+      
+      if (!order) {
+        console.error(`Order ${orderId} not found`);
+        return;
+      }
+
+      // Only update if order is still pending
+      if (order.status === OrderStatus.PENDING) {
+        await this.orderService.updateOrderStatus(orderId, OrderStatus.CANCELLED);
+        console.log(`Order ${orderId} marked as CANCELLED due to session expiration`);
+        
+        // Update webhook event status
+        await WebhookEventModel.findOneAndUpdate(
+          { sessionId: session.id, eventType: 'checkout.session.expired' },
+          { status: 'success' }
+        );
+      }
+    } catch (error) {
+      console.error('Error handling checkout.session.expired:', error);
+      
+      // Update webhook event status to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { sessionId: session.id, eventType: 'checkout.session.expired' },
+        { 
+          status: 'failed',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        }
+      );
     }
   }
 }

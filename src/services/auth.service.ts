@@ -1,31 +1,12 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { UserModel, UserRole } from '../models/user.model.js';
-import { OrderModel, OrderStatus } from '../models/order.model.js';
 import {
   UserAlreadyExistsException,
   InvalidCredentialsException,
   DatabaseException,
   JWTSecretMissingException
 } from '../errors/CustomError.js';
-
-export interface RegisterInput {
-  email: string;
-  password: string;
-  role?: UserRole;
-}
-
-export interface LoginInput {
-  email: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  userId: string;
-  email: string;
-  role: UserRole;
-  token: string;
-}
 
 export class AuthService {
   private readonly SALT_ROUNDS = 10;
@@ -41,38 +22,26 @@ export class AuthService {
     }
   }
 
-  async register(input: RegisterInput): Promise<AuthResponse> {
+  async register(email: string, password: string, role?: UserRole): Promise<{ userId: string; email: string; role: UserRole; token: string }> {
     try {
       // Check if user already exists
-      const existingUser = await UserModel.findOne({ email: input.email });
+      const existingUser = await UserModel.findOne({ email });
       if (existingUser) {
-        throw new UserAlreadyExistsException(input.email);
+        throw new UserAlreadyExistsException(email);
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(input.password, this.SALT_ROUNDS);
+      const hashedPassword = await bcrypt.hash(password, this.SALT_ROUNDS);
 
       // Create user ID
       const userId = crypto.randomUUID();
 
-      // Create a DRAFT order for the new user (shopping cart)
-      const draftOrder = new OrderModel({
-        id: crypto.randomUUID(),
-        lineItems: [],
-        status: OrderStatus.DRAFT,
-        userId: userId,
-        totalAmount: 0
-      });
-
-      await draftOrder.save();
-
-      // Create user with reference to draft order
+      // Create user (draft order will be created lazily when needed)
       const userDoc = new UserModel({
         id: userId,
-        email: input.email,
+        email,
         password: hashedPassword,
-        role: input.role || UserRole.USER,
-        draftOrderId: draftOrder.id
+        role: role || UserRole.USER
       });
 
       await userDoc.save();
@@ -94,16 +63,16 @@ export class AuthService {
     }
   }
 
-  async login(input: LoginInput): Promise<AuthResponse> {
+  async login(email: string, password: string): Promise<{ userId: string; email: string; role: UserRole; token: string }> {
     try {
       // Find user by email
-      const user = await UserModel.findOne({ email: input.email });
+      const user = await UserModel.findOne({ email });
       if (!user) {
         throw new InvalidCredentialsException();
       }
 
       // Verify password
-      const isPasswordValid = await bcrypt.compare(input.password, user.password);
+      const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
         throw new InvalidCredentialsException();
       }
@@ -138,7 +107,7 @@ export class AuthService {
     return jwt.sign(
       { userId, role },
       this.JWT_SECRET,
-      { expiresIn: '24h' } // this one must be loaded from .env (there's a bug if I just the line above, I'll fix it later)
+      { expiresIn: this.JWT_EXPIRES_IN } as jwt.SignOptions
     );
   }
 }
