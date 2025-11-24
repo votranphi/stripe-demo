@@ -40,8 +40,8 @@ export class OrderService {
       }
 
       const draft = await OrderModel.findOne({ id: user.draftOrderId });
-      if (!draft) {
-        // Draft doesn't exist, create a new one
+      if (!draft || draft.status !== OrderStatus.DRAFT) {
+        // Create draft order now if couldn't find the DRAFT order
         return await this.createNewDraft(userId);
       }
 
@@ -420,10 +420,10 @@ export class OrderService {
         await this.incrementProductStock(currentOrder.lineItems);
 
         // Refund payment if order was paid
-        if (currentOrder.status === OrderStatus.PAID || 
-            currentOrder.status === OrderStatus.PROCESSING || 
-            currentOrder.status === OrderStatus.SHIPPED || 
-            currentOrder.status === OrderStatus.DELIVERED) {
+        if (currentOrder.status === OrderStatus.PAID ||
+          currentOrder.status === OrderStatus.PROCESSING ||
+          currentOrder.status === OrderStatus.SHIPPED ||
+          currentOrder.status === OrderStatus.DELIVERED) {
           if (currentOrder.stripePaymentIntentId) {
             await this.paymentService.createRefund(currentOrder.stripePaymentIntentId, id);
           }
@@ -514,7 +514,7 @@ export class OrderService {
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 });
-      
+
       return {
         orders: orders.map(order => ({
           id: order.id,
@@ -539,7 +539,7 @@ export class OrderService {
     try {
       // Find orders that are still pending for more than 10 minutes
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-      
+
       const pendingOrders = await OrderModel.find({
         status: OrderStatus.PENDING,
         createdAt: { $lt: tenMinutesAgo },
@@ -569,7 +569,7 @@ export class OrderService {
             // Check if session is too old (e.g., more than 24 hours)
             const sessionCreatedAt = new Date(session.created * 1000);
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            
+
             if (sessionCreatedAt < twentyFourHoursAgo && order.status === OrderStatus.PENDING) {
               await this.updateOrderStatus(order.id, OrderStatus.CANCELLED);
               console.log(`Expired order ${order.id} marked as CANCELLED (unpaid too long) via cron job`);
