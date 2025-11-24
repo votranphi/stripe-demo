@@ -107,7 +107,7 @@ export class AuthService {
     return jwt.sign(
       { userId, role },
       this.JWT_SECRET,
-      { expiresIn: '24h' } // this one must be loaded from .env (there's a bug if I just the line above, I'll fix it later)
+      { expiresIn: this.JWT_EXPIRES_IN } as jwt.SignOptions
     );
   }
 }

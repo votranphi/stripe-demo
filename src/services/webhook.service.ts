@@ -1,5 +1,5 @@
 import { OrderService } from './order.service.js';
-import stripe from '../config/stripe.js';
+import { PaymentService } from './payment.service.js';
 import { OrderModel, OrderStatus } from '../models/order.model.js';
 import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
@@ -7,10 +7,15 @@ import Stripe from 'stripe';
 import Database from '../config/database.js';
 
 export class WebhookService {
-  private orderService: OrderService;
+  private readonly orderService: OrderService;
+  private readonly paymentService: PaymentService;
 
-  constructor() {
-    this.orderService = new OrderService();
+  constructor(
+    orderService?: OrderService,
+    paymentService?: PaymentService
+  ) {
+    this.orderService = orderService || new OrderService();
+    this.paymentService = paymentService || new PaymentService();
   }
 
   async handleWebhookEvent(payload: Buffer, signature: string): Promise<void> {
@@ -23,8 +28,8 @@ export class WebhookService {
     let event: Stripe.Event;
 
     try {
-      // Verify webhook signature
-      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+      // Verify webhook signature using PaymentService
+      event = this.paymentService.verifyWebhookSignature(payload, signature, webhookSecret);
     } catch (error) {
       console.error('Webhook signature verification failed:', error);
       throw new WebhookSignatureException();

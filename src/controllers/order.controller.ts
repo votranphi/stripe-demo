@@ -6,14 +6,10 @@ import { MissingSessionIdException, UnauthorizedException } from '../errors/Cust
 import { OrderStatus } from '../models/order.model.js';
 
 export class OrderController {
-  private orderService: OrderService | null = null;
+  private readonly orderService: OrderService;
 
-  // For lazy initialization
-  private getOrderService(): OrderService {
-    if (!this.orderService) {
-      this.orderService = new OrderService();
-    }
-    return this.orderService;
+  constructor(orderService?: OrderService) {
+    this.orderService = orderService || new OrderService();
   }
 
   // GET /api/v1/orders/draft
@@ -23,7 +19,7 @@ export class OrderController {
       throw new UnauthorizedException();
     }
 
-    const draft = await this.getOrderService().getUserDraft(userId);
+    const draft = await this.orderService.getUserDraft(userId);
 
     res.status(200).json({
       success: true,
@@ -40,7 +36,7 @@ export class OrderController {
 
     // Validate request body using DTO
     const dto = new AddItemDTO(req.body);
-    const updatedDraft = await this.getOrderService().addItemToDraft(userId, dto.productId, dto.quantity);
+    const updatedDraft = await this.orderService.addItemToDraft(userId, dto.productId, dto.quantity);
 
     res.status(200).json({
       success: true,
@@ -61,7 +57,7 @@ export class OrderController {
       throw new Error('Product ID is required');
     }
 
-    const updatedDraft = await this.getOrderService().removeItemFromDraft(userId, productId);
+    const updatedDraft = await this.orderService.removeItemFromDraft(userId, productId);
 
     res.status(200).json({
       success: true,
@@ -83,7 +79,7 @@ export class OrderController {
     }
 
     const dto = new UpdateItemDTO(req.body);
-    const updatedDraft = await this.getOrderService().updateDraftItemQuantity(userId, productId, dto.quantity);
+    const updatedDraft = await this.orderService.updateDraftItemQuantity(userId, productId, dto.quantity);
 
     res.status(200).json({
       success: true,
@@ -98,7 +94,7 @@ export class OrderController {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     
-    const result = await this.getOrderService().getAllOrders(page, limit);
+    const result = await this.orderService.getAllOrders(page, limit);
     res.status(200).json({
       success: true,
       data: result.orders,
@@ -122,7 +118,7 @@ export class OrderController {
     // Validate and parse body using DTO
     const dto = new UpdateOrderStatusDTO(req.body);
 
-    const updatedOrder = await this.getOrderService().updateOrderStatus(id, dto.status as OrderStatus);
+    const updatedOrder = await this.orderService.updateOrderStatus(id, dto.status as OrderStatus);
     if (!updatedOrder) {
       res.status(404).json({ success: false, message: 'Order not found' });
       return;
@@ -142,7 +138,7 @@ export class OrderController {
     }
 
     // Create checkout from user's draft
-    const { checkoutUrl, orderId } = await this.getOrderService().createCheckoutFromDraft(userId, 'v1');
+    const { checkoutUrl, orderId } = await this.orderService.createCheckoutFromDraft(userId, 'v1');
 
     res.status(201).json({
       success: true,
@@ -162,10 +158,10 @@ export class OrderController {
     }
 
     // Retrieve session and order info
-    const { orderId, session } = await this.getOrderService().retrieveCheckoutSession(sessionId);
+    const { orderId, session } = await this.orderService.retrieveCheckoutSession(sessionId);
 
     // Get order info (DO NOT update status here - only webhook should do that)
-    const order = await this.getOrderService().getOrderById(orderId);
+    const order = await this.orderService.getOrderById(orderId);
 
     res.status(200).json({
       success: true,
