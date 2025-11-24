@@ -25,13 +25,20 @@ export class OrderService {
   async getUserDraft(userId: string): Promise<Order> {
     try {
       const user = await UserModel.findOne({ id: userId });
-      if (!user || !user.draftOrderId) {
+      if (!user) {
         throw new DraftOrderNotFoundException(userId);
+      }
+
+      // Check if user has a draft order ID
+      if (!user.draftOrderId) {
+        // Lazy creation: create draft order now
+        return await this.createNewDraft(userId);
       }
 
       const draft = await OrderModel.findOne({ id: user.draftOrderId });
       if (!draft) {
-        throw new DraftOrderNotFoundException(userId);
+        // Draft doesn't exist, create a new one
+        return await this.createNewDraft(userId);
       }
 
       return {
@@ -509,18 +516,29 @@ export class OrderService {
     );
   }
 
-  async getAllOrders(): Promise<Order[]> {
+  async getAllOrders(page: number = 1, limit: number = 10): Promise<{ orders: Order[]; total: number; page: number; totalPages: number }> {
     try {
-      const orders = await OrderModel.find({});
-      return orders.map(order => ({
-        id: order.id,
-        lineItems: order.lineItems,
-        status: order.status,
-        userId: order.userId,
-        totalAmount: order.totalAmount,
-        stripePaymentIntentId: order.stripePaymentIntentId,
-        stripeSessionId: order.stripeSessionId
-      }));
+      const skip = (page - 1) * limit;
+      const total = await OrderModel.countDocuments({});
+      const orders = await OrderModel.find({})
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+      
+      return {
+        orders: orders.map(order => ({
+          id: order.id,
+          lineItems: order.lineItems,
+          status: order.status,
+          userId: order.userId,
+          totalAmount: order.totalAmount,
+          stripePaymentIntentId: order.stripePaymentIntentId,
+          stripeSessionId: order.stripeSessionId
+        })),
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+      };
     } catch (error) {
       throw new DatabaseException('fetch all orders', error instanceof Error ? error : undefined);
     }

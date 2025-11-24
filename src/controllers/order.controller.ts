@@ -95,10 +95,19 @@ export class OrderController {
   // GET /api/v1/admin/orders
   getAllOrdersByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     // isAdmin middleware should already protect this route
-    const orders = await this.getOrderService().getAllOrders();
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    
+    const result = await this.getOrderService().getAllOrders(page, limit);
     res.status(200).json({
       success: true,
-      data: orders
+      data: result.orders,
+      pagination: {
+        page: result.page,
+        limit: limit,
+        total: result.total,
+        totalPages: result.totalPages
+      }
     });
   });
 

@@ -37,24 +37,12 @@ export class AuthService {
       // Create user ID
       const userId = crypto.randomUUID();
 
-      // Create a DRAFT order for the new user (shopping cart)
-      const draftOrder = new OrderModel({
-        id: crypto.randomUUID(),
-        lineItems: [],
-        status: OrderStatus.DRAFT,
-        userId: userId,
-        totalAmount: 0
-      });
-
-      await draftOrder.save();
-
-      // Create user with reference to draft order
+      // Create user (draft order will be created lazily when needed)
       const userDoc = new UserModel({
         id: userId,
         email,
         password: hashedPassword,
-        role: role || UserRole.USER,
-        draftOrderId: draftOrder.id
+        role: role || UserRole.USER
       });
 
       await userDoc.save();
