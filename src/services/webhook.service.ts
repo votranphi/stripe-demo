@@ -50,11 +50,6 @@ export class WebhookService {
         await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
         break;
       
-      case 'payment_intent.payment_failed':
-        await this.saveWebhookEvent(event);
-        await this.handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
-        break;
-      
       // Add more event handlers as needed
       default:
         // Log unhandled event, do NOT save to DB
@@ -271,38 +266,4 @@ export class WebhookService {
     }
   }
 
-  private async handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    try {
-      // Find order by payment intent ID
-      const order = await OrderModel.findOne({ stripePaymentIntentId: paymentIntent.id });
-
-      if (!order) {
-        console.log(`No order found for payment intent ${paymentIntent.id}`);
-        return;
-      }
-
-      // Only update if order is still pending
-      if (order.status === OrderStatus.PENDING) {
-        await this.orderService.updateOrderStatus(order.id, OrderStatus.CANCELLED);
-        console.log(`Order ${order.id} marked as CANCELLED due to payment failure`);
-        
-        // Update webhook event status
-        await WebhookEventModel.findOneAndUpdate(
-          { sessionId: paymentIntent.id, eventType: 'payment_intent.payment_failed' },
-          { status: 'success', orderId: order.id }
-        );
-      }
-    } catch (error) {
-      console.error('Error handling payment_intent.payment_failed:', error);
-      
-      // Update webhook event status to failed
-      await WebhookEventModel.findOneAndUpdate(
-        { sessionId: paymentIntent.id, eventType: 'payment_intent.payment_failed' },
-        { 
-          status: 'failed',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error'
-        }
-      );
-    }
-  }
 }
