@@ -3,6 +3,8 @@ import { Order, OrderModel, OrderStatus, OrderLineItem } from '../models/order.m
 import { UserModel } from '../models/user.model.js';
 import { ProductService } from './product.service.js';
 import { PaymentService } from './payment.service.js';
+import { ProductModel } from '../models/product.model.js';
+import mongoose from 'mongoose';
 import {
   ProductNotFoundException,
   InsufficientStockException,
@@ -395,6 +397,26 @@ export class OrderService {
     }
   }
 
+  async getOrderByPaymentIntentId(paymentIntentId: string): Promise<Order | null> {
+    try {
+      const order = await OrderModel.findOne({ stripePaymentIntentId: paymentIntentId });
+      if (!order) {
+        return null;
+      }
+      return {
+        id: order.id,
+        lineItems: order.lineItems,
+        status: order.status,
+        userId: order.userId,
+        totalAmount: order.totalAmount,
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        stripeSessionId: order.stripeSessionId
+      };
+    } catch (error) {
+      throw new DatabaseException('fetch order by payment intent ID', error instanceof Error ? error : undefined);
+    }
+  }
+
   async savePaymentIntentId(id: string, paymentIntentId: string): Promise<void> {
     try {
       await OrderModel.findOneAndUpdate(
@@ -406,52 +428,64 @@ export class OrderService {
     }
   }
 
-  async updateOrderStatus(id: string, status: OrderStatus): Promise<Order | null> {
+  async updateOrderStatus(id: string, status: OrderStatus, skipRefund: boolean = false): Promise<Order | null> {
+    const session = await Database.getInstance().startSession();
+
     try {
-      // Get current order first
-      const currentOrder = await OrderModel.findOne({ id });
-      if (!currentOrder) {
-        return null;
-      }
+      let result: Order | null = null;
 
-      // If changing to CANCELLED status, handle refund and restock
-      if (status === OrderStatus.CANCELLED && currentOrder.status !== OrderStatus.CANCELLED) {
-        // Restock products
-        await this.incrementProductStock(currentOrder.lineItems);
+      await session.withTransaction(async () => {
+        // Get current order first within transaction
+        const currentOrder = await OrderModel.findOne({ id }).session(session);
+        if (!currentOrder) {
+          return;
+        }
 
-        // Refund payment if order was paid
-        if (currentOrder.status === OrderStatus.PAID ||
-          currentOrder.status === OrderStatus.PROCESSING ||
-          currentOrder.status === OrderStatus.SHIPPED ||
-          currentOrder.status === OrderStatus.DELIVERED) {
-          if (currentOrder.stripePaymentIntentId) {
-            await this.paymentService.createRefund(currentOrder.stripePaymentIntentId, id);
+        // If changing to CANCELLED status, handle refund and restock
+        if (status === OrderStatus.CANCELLED && currentOrder.status !== OrderStatus.CANCELLED) {
+          // Restock products within transaction
+          await this.incrementProductStock(currentOrder.lineItems, session);
+
+          // Refund payment if order was paid (unless skipRefund is true). If refund fails, the transaction will roll back
+          if (!skipRefund) {
+            if (currentOrder.status === OrderStatus.PAID ||
+              currentOrder.status === OrderStatus.PROCESSING ||
+              currentOrder.status === OrderStatus.SHIPPED ||
+              currentOrder.status === OrderStatus.DELIVERED) {
+              if (currentOrder.stripePaymentIntentId) {
+                await this.paymentService.createRefund(currentOrder.stripePaymentIntentId, id);
+              }
+            }
           }
         }
-      }
 
-      // Update order status
-      const result = await OrderModel.findOneAndUpdate(
-        { id },
-        { $set: { status } },
-        { new: true }
-      );
+        // Update order status within transaction
+        const updatedOrder = await OrderModel.findOneAndUpdate(
+          { id },
+          { $set: { status } },
+          { new: true, session }
+        );
 
-      if (!result) {
-        return null;
-      }
+        if (!updatedOrder) {
+          return;
+        }
 
-      return {
-        id: result.id,
-        lineItems: result.lineItems,
-        status: result.status,
-        userId: result.userId,
-        totalAmount: result.totalAmount,
-        stripePaymentIntentId: result.stripePaymentIntentId,
-        stripeSessionId: result.stripeSessionId
-      };
+        result = {
+          id: updatedOrder.id,
+          lineItems: updatedOrder.lineItems,
+          status: updatedOrder.status,
+          userId: updatedOrder.userId,
+          totalAmount: updatedOrder.totalAmount,
+          stripePaymentIntentId: updatedOrder.stripePaymentIntentId,
+          stripeSessionId: updatedOrder.stripeSessionId
+        };
+      });
+
+      return result;
     } catch (error) {
       throw new DatabaseException('update order status', error instanceof Error ? error : undefined);
+    } finally {
+      await session.endSession();
     }
   }
 
@@ -610,14 +644,17 @@ export class OrderService {
     }
   }
 
-  private async incrementProductStock(lineItems: OrderLineItem[]): Promise<void> {
+  private async incrementProductStock(lineItems: OrderLineItem[], session?: mongoose.ClientSession): Promise<void> {
     for (const item of lineItems) {
-      const product = await this.productService.getProductById(item.productId);
+      // Use direct MongoDB query with session instead of ProductService to ensure the operation is part of the transaction
+      const product = await ProductModel.findOne({ id: item.productId }).session(session || null);
       if (product) {
-        // Add back the quantity to stock
-        await this.productService.updateProduct(item.productId, {
-          stock: product.stock + item.quantity
-        });
+        // Add back the quantity to stock using atomic increment
+        await ProductModel.findOneAndUpdate(
+          { id: item.productId },
+          { $inc: { stock: item.quantity } },
+          { session: session || undefined }
+        );
       }
     }
   }
