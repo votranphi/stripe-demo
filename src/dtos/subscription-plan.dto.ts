@@ -5,8 +5,8 @@ export class CreateUpdateSubscriptionPlanDTO {
   static schema = z.object({
     stripePriceId: z.string().min(1, 'Stripe Price ID is required'),
     productId: z.string().min(1, 'Product ID is required'),
-    frequency: z.nativeEnum(SubscriptionFrequency, {
-      errorMap: () => ({ message: 'Frequency must be either MONTHLY or YEARLY' })
+    frequency: z.enum(SubscriptionFrequency, {
+      message: 'Frequency must be either MONTHLY or YEARLY'
     }),
     currency: z.string().min(1, 'Currency is required').default('usd'),
   });
