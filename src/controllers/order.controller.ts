@@ -92,48 +92,6 @@ export class OrderController {
     });
   });
 
-  // GET /api/v1/admin/orders
-  getAllOrdersByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    // isAdmin middleware should already protect this route
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-
-    const result = await this.getOrderService().getAllOrders(page, limit);
-    res.status(200).json({
-      success: true,
-      data: result.orders,
-      pagination: {
-        page: result.page,
-        limit: limit,
-        total: result.total,
-        totalPages: result.totalPages
-      }
-    });
-  });
-
-  // PUT /api/v1/admin/orders/:id/status
-  updateOrderStatusByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    // isAdmin middleware should already protect this route
-    const { id } = req.params;
-    if (!id) {
-      throw new Error('Order ID is required');
-    }
-
-    // Validate and parse body using DTO
-    const dto = new UpdateOrderStatusDTO(req.body);
-
-    const updatedOrder = await this.getOrderService().updateOrderStatus(id, dto.status as OrderStatus);
-    if (!updatedOrder) {
-      res.status(404).json({ success: false, message: 'Order not found' });
-      return;
-    }
-    res.status(200).json({
-      success: true,
-      message: 'Order status updated',
-      data: updatedOrder
-    });
-  });
-
   // POST /api/v1/orders/checkout/create-session
   createCheckoutSession = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
@@ -186,6 +144,48 @@ export class OrderController {
       data: {
         redirectUrl: '/products'
       }
+    });
+  });
+
+  // GET /api/v1/admin/orders
+  getAllOrdersByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    // isAdmin middleware should already protect this route
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    const result = await this.getOrderService().getAllOrders(page, limit);
+    res.status(200).json({
+      success: true,
+      data: result.orders,
+      pagination: {
+        page: result.page,
+        limit: limit,
+        total: result.total,
+        totalPages: result.totalPages
+      }
+    });
+  });
+
+  // PUT /api/v1/admin/orders/:id/status
+  updateOrderStatusByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    // isAdmin middleware should already protect this route
+    const { id } = req.params;
+    if (!id) {
+      throw new Error('Order ID is required');
+    }
+
+    // Validate and parse body using DTO
+    const dto = new UpdateOrderStatusDTO(req.body);
+
+    const updatedOrder = await this.getOrderService().updateOrderStatus(id, dto.status as OrderStatus);
+    if (!updatedOrder) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Order status updated',
+      data: updatedOrder
     });
   });
 }
