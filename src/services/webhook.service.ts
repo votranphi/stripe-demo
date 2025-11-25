@@ -50,6 +50,11 @@ export class WebhookService {
         await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
         break;
       
+      case 'charge.refunded':
+        await this.saveWebhookEvent(event);
+        await this.handleChargeRefunded(event.data.object as Stripe.Charge);
+        break;
+      
       // Add more event handlers as needed
       default:
         // Log unhandled event, do NOT save to DB
@@ -263,6 +268,105 @@ export class WebhookService {
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         }
       );
+    }
+  }
+
+  private async handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+    // Extract payment_intent from charge object
+    const paymentIntentId = typeof charge.payment_intent === 'string' 
+      ? charge.payment_intent 
+      : charge.payment_intent?.id;
+
+    if (!paymentIntentId) {
+      console.error('Payment intent ID not found in charge.refunded event');
+      await this.logWebhookEvent(charge.id, 'charge.refunded', undefined, 'failed', 'Payment intent ID not found');
+      return;
+    }
+
+    // Implement DB Transaction
+    const dbSession = await Database.getInstance().startSession();
+
+    try {
+      await dbSession.withTransaction(async () => {
+        // Check Idempotency - only throw error if event has been successfully processed
+        const existingEvent = await WebhookEventModel.findOne({ sessionId: charge.id }).session(dbSession);
+        
+        if (existingEvent && existingEvent.status === 'success') {
+          console.log(`Charge ${charge.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          throw new DuplicateProcessingException(`Charge ${charge.id} has already been processed`);
+        }
+
+        // If existingEvent and the status is 'pending' or 'failed', accept retry logic
+        if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
+          console.log(`Charge ${charge.id} has status ${existingEvent.status}, retrying processing...`);
+        }
+
+        // Find order by payment intent ID
+        const order = await this.orderService.getOrderByPaymentIntentId(paymentIntentId);
+        
+        if (!order) {
+          console.error(`Order not found for payment intent ${paymentIntentId}`);
+          throw new Error('Order not found for payment intent');
+        }
+
+        // Only process if order is not already CANCELLED
+        if (order.status === OrderStatus.CANCELLED) {
+          console.log(`Order ${order.id} is already CANCELLED, skipping...`);
+          
+          // Update webhook event to success because the order has been processed
+          await WebhookEventModel.findOneAndUpdate(
+            { sessionId: charge.id },
+            {
+              status: 'success',
+              processedAt: new Date(),
+              orderId: order.id,
+              errorMessage: 'Order already CANCELLED'
+            },
+            { session: dbSession }
+          );
+          return;
+        }
+
+        // Update order status to CANCELLED with skipRefund = true
+        // This will restock items but skip calling Stripe refund API
+        await this.orderService.updateOrderStatus(order.id, OrderStatus.CANCELLED, true);
+        console.log(`Order ${order.id} marked as CANCELLED due to Stripe Dashboard refund (skipRefund=true)`);
+
+        // Update webhook event to success
+        await WebhookEventModel.findOneAndUpdate(
+          { sessionId: charge.id },
+          {
+            status: 'success',
+            processedAt: new Date(),
+            orderId: order.id,
+            eventType: 'charge.refunded',
+            errorMessage: undefined
+          },
+          { 
+            upsert: true,
+            session: dbSession 
+          }
+        );
+        console.log(`Webhook event updated to success for charge ${charge.id}`);
+      });
+    } catch (error) {
+      console.error('Error handling charge.refunded:', error);
+      
+      // Update webhook event to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { sessionId: charge.id },
+        {
+          status: 'failed',
+          processedAt: new Date(),
+          eventType: 'charge.refunded',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { upsert: true }
+      );
+      
+      throw error;
+    } finally {
+      await dbSession.endSession();
     }
   }
 }

@@ -395,6 +395,26 @@ export class OrderService {
     }
   }
 
+  async getOrderByPaymentIntentId(paymentIntentId: string): Promise<Order | null> {
+    try {
+      const order = await OrderModel.findOne({ stripePaymentIntentId: paymentIntentId });
+      if (!order) {
+        return null;
+      }
+      return {
+        id: order.id,
+        lineItems: order.lineItems,
+        status: order.status,
+        userId: order.userId,
+        totalAmount: order.totalAmount,
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        stripeSessionId: order.stripeSessionId
+      };
+    } catch (error) {
+      throw new DatabaseException('fetch order by payment intent ID', error instanceof Error ? error : undefined);
+    }
+  }
+
   async savePaymentIntentId(id: string, paymentIntentId: string): Promise<void> {
     try {
       await OrderModel.findOneAndUpdate(
@@ -406,7 +426,7 @@ export class OrderService {
     }
   }
 
-  async updateOrderStatus(id: string, status: OrderStatus): Promise<Order | null> {
+  async updateOrderStatus(id: string, status: OrderStatus, skipRefund: boolean = false): Promise<Order | null> {
     try {
       // Get current order first
       const currentOrder = await OrderModel.findOne({ id });
@@ -419,13 +439,15 @@ export class OrderService {
         // Restock products
         await this.incrementProductStock(currentOrder.lineItems);
 
-        // Refund payment if order was paid
-        if (currentOrder.status === OrderStatus.PAID ||
-          currentOrder.status === OrderStatus.PROCESSING ||
-          currentOrder.status === OrderStatus.SHIPPED ||
-          currentOrder.status === OrderStatus.DELIVERED) {
-          if (currentOrder.stripePaymentIntentId) {
-            await this.paymentService.createRefund(currentOrder.stripePaymentIntentId, id);
+        // Refund payment if order was paid (unless skipRefund is true)
+        if (!skipRefund) {
+          if (currentOrder.status === OrderStatus.PAID ||
+            currentOrder.status === OrderStatus.PROCESSING ||
+            currentOrder.status === OrderStatus.SHIPPED ||
+            currentOrder.status === OrderStatus.DELIVERED) {
+            if (currentOrder.stripePaymentIntentId) {
+              await this.paymentService.createRefund(currentOrder.stripePaymentIntentId, id);
+            }
           }
         }
       }
