@@ -20,7 +20,8 @@ export class ProductService {
           id: product.id,
           name: product.name,
           price: product.price,
-          stock: product.stock
+          stock: product.stock,
+          type: product.type
         })),
         total,
         page,
@@ -41,7 +42,8 @@ export class ProductService {
         id: product.id,
         name: product.name,
         price: product.price,
-        stock: product.stock
+        stock: product.stock,
+        type: product.type
       };
     } catch (error) {
       throw new DatabaseException('fetch product', error instanceof Error ? error : undefined);
@@ -54,7 +56,8 @@ export class ProductService {
         id: crypto.randomUUID(),
         name: productData.name,
         price: productData.price,
-        stock: productData.stock
+        stock: productData.stock,
+        type: productData.type
       });
 
       await newProduct.save();
@@ -63,7 +66,8 @@ export class ProductService {
         id: newProduct.id,
         name: newProduct.name,
         price: newProduct.price,
-        stock: newProduct.stock
+        stock: newProduct.stock,
+        type: newProduct.type
       };
     } catch (error) {
       throw new ProductCreationException(
@@ -92,7 +96,8 @@ export class ProductService {
         id: result.id,
         name: result.name,
         price: result.price,
-        stock: result.stock
+        stock: result.stock,
+        type: result.type
       };
     } catch (error) {
       throw new ProductUpdateException(id, error instanceof Error ? error : undefined);
