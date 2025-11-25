@@ -73,6 +73,12 @@ export class DraftOrderNotFoundException extends CustomError {
   }
 }
 
+export class SubscriptionPlanNotFoundException extends CustomError {
+  constructor(planId: string) {
+    super(`Subscription plan with id ${planId} not found`, 404);
+  }
+}
+
 // 409 Errors
 export class InsufficientStockException extends CustomError {
   constructor(productName: string) {

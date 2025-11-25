@@ -1,10 +1,12 @@
 import Stripe from 'stripe';
 import stripe from '../config/stripe.js';
 import { OrderLineItem } from '../models/order.model.js';
+import { UserModel } from '../models/user.model.js';
 import {
   CheckoutSessionException,
   StripeRefundException,
-  WebhookSignatureException
+  WebhookSignatureException,
+  DatabaseException
 } from '../errors/CustomError.js';
 
 export class PaymentService {
@@ -88,6 +90,88 @@ export class PaymentService {
     } catch (error) {
       console.error('Webhook signature verification failed:', error);
       throw new WebhookSignatureException();
+    }
+  }
+
+  // Gets or creates a Stripe customer for a user
+  async getOrCreateCustomer(userId: string, email: string): Promise<string> {
+    try {
+      // Check if user already has a Stripe customer ID
+      const user = await UserModel.findOne({ id: userId });
+      if (!user) {
+        throw new DatabaseException('User not found');
+      }
+
+      if (user.stripeCustomerId) {
+        return user.stripeCustomerId;
+      }
+
+      // Create new customer in Stripe
+      const customer = await this.stripe.customers.create({
+        email: email,
+        metadata: {
+          user_id: userId
+        }
+      });
+
+      // Save customer ID to user document
+      await UserModel.findOneAndUpdate(
+        { id: userId },
+        { $set: { stripeCustomerId: customer.id } }
+      );
+
+      return customer.id;
+    } catch (error) {
+      if (error instanceof DatabaseException) {
+        throw error;
+      }
+      throw new CheckoutSessionException(
+        error instanceof Error ? error.message : 'Failed to get or create customer'
+      );
+    }
+  }
+
+  // Creates a Stripe checkout session for a subscription
+  async createSubscriptionCheckoutSession(
+    customerId: string,
+    priceId: string,
+    userId: string,
+    successUrl: string,
+    cancelUrl: string
+  ): Promise<{ sessionId: string; url: string }> {
+    try {
+      const session = await this.stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        mode: 'subscription',
+        customer: customerId,
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1
+          }
+        ],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          user_id: userId
+        }
+      });
+
+      if (!session.url) {
+        throw new CheckoutSessionException('Stripe session URL is null');
+      }
+
+      return {
+        sessionId: session.id,
+        url: session.url
+      };
+    } catch (error) {
+      if (error instanceof CheckoutSessionException) {
+        throw error;
+      }
+      throw new CheckoutSessionException(
+        error instanceof Error ? error.message : 'Failed to create subscription checkout session'
+      );
     }
   }
 
