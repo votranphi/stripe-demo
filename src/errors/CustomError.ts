@@ -22,6 +22,12 @@ export class MissingSessionIdException extends CustomError {
   }
 }
 
+export class InvalidProductTypeException extends CustomError {
+  constructor() {
+    super('Subscription products cannot be added to the shopping cart. Please use the subscription checkout flow.', 400);
+  }
+}
+
 // 401 Errors
 export class UnauthorizedException extends CustomError {
   constructor() {

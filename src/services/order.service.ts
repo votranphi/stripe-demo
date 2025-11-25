@@ -3,7 +3,7 @@ import { Order, OrderModel, OrderStatus, OrderLineItem } from '../models/order.m
 import { UserModel } from '../models/user.model.js';
 import { ProductService } from './product.service.js';
 import { PaymentService } from './payment.service.js';
-import { ProductModel } from '../models/product.model.js';
+import { ProductModel, ProductType } from '../models/product.model.js';
 import mongoose from 'mongoose';
 import {
   ProductNotFoundException,
@@ -12,6 +12,7 @@ import {
   DraftOrderNotFoundException,
   ItemNotInDraftException,
   EmptyDraftException,
+  InvalidProductTypeException,
   DatabaseException,
   CheckoutSessionException,
 } from '../errors/CustomError.js';
@@ -73,6 +74,11 @@ export class OrderService {
       const product = await this.productService.getProductById(productId);
       if (!product) {
         throw new ProductNotFoundException(productId);
+      }
+
+      // Block subscription products from being added to cart
+      if (product.type === ProductType.SUBSCRIPTION) {
+        throw new InvalidProductTypeException();
       }
 
       // Calculate total quantity including existing draft items
@@ -138,7 +144,8 @@ export class OrderService {
       if (
         error instanceof DraftOrderNotFoundException ||
         error instanceof ProductNotFoundException ||
-        error instanceof InsufficientStockException
+        error instanceof InsufficientStockException ||
+        error instanceof InvalidProductTypeException
       ) {
         throw error;
       }
@@ -286,6 +293,9 @@ export class OrderService {
           throw new EmptyDraftException();
         }
 
+        // Verify no subscription products in cart
+        await this.validateNoSubscriptionProducts(draft.lineItems);
+
         // Validate all products still exist and have sufficient stock
         await this.validateDraftStock(draft.lineItems);
 
@@ -334,6 +344,7 @@ export class OrderService {
         error instanceof DraftOrderNotFoundException ||
         error instanceof ProductNotFoundException ||
         error instanceof InsufficientStockException ||
+        error instanceof InvalidProductTypeException ||
         error instanceof CheckoutSessionException
       ) {
         throw error;
@@ -620,6 +631,18 @@ export class OrderService {
   }
 
   // Private helper methods
+
+  private async validateNoSubscriptionProducts(lineItems: OrderLineItem[]): Promise<void> {
+    for (const item of lineItems) {
+      const product = await this.productService.getProductById(item.productId);
+      if (!product) {
+        throw new ProductNotFoundException(item.productId);
+      }
+      if (product.type === ProductType.SUBSCRIPTION) {
+        throw new InvalidProductTypeException();
+      }
+    }
+  }
 
   private async validateDraftStock(lineItems: OrderLineItem[]): Promise<void> {
     for (const item of lineItems) {
