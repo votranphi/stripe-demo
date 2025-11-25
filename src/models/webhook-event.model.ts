@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface WebhookEvent {
-  sessionId: string;
+  stripeId: string;
   eventType: string;
   orderId?: string;
   processedAt: Date;
@@ -10,7 +10,7 @@ export interface WebhookEvent {
 }
 
 export interface WebhookEventDocument extends Document {
-  sessionId: string;
+  stripeId: string;
   eventType: string;
   orderId?: string;
   processedAt: Date;
@@ -19,7 +19,7 @@ export interface WebhookEventDocument extends Document {
 }
 
 const webhookEventSchema = new Schema<WebhookEventDocument>({
-  sessionId: { type: String, required: true, unique: true, index: true },
+  stripeId: { type: String, required: true, unique: true, index: true },
   eventType: { type: String, required: true },
   orderId: { type: String },
   processedAt: { type: Date, required: true, default: Date.now },
