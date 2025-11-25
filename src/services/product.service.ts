@@ -98,6 +98,7 @@ export class ProductService {
       throw new ProductUpdateException(id, error instanceof Error ? error : undefined);
     }
   }
+
   async deleteProduct(id: string): Promise<boolean> {
     try {
       const result = await ProductModel.findOneAndDelete({ id });
