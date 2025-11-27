@@ -382,12 +382,10 @@ export class WebhookService {
           throw new Error('User not found for Stripe customer');
         }
 
-        // Determine subscription status based on Stripe subscription status
-        // Only activate if payment is confirmed or trial is active
+        // Determine subscription status based on Stripe subscription status. Only activate if payment is confirmed or trial is active
         let dbStatus: UserSubscriptionStatus;
         
         if (subscription.status === 'trialing' || subscription.status === 'active') {
-          // Safe to activate: either in trial period or payment already succeeded
           dbStatus = UserSubscriptionStatus.ACTIVE;
           console.log(`Subscription ${subscription.id} status is ${subscription.status}, setting to ACTIVE`);
         } else {
