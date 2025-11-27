@@ -253,9 +253,7 @@ export class WebhookService {
 
   private async handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     // Extract payment_intent from charge object
-    const paymentIntentId = typeof charge.payment_intent === 'string'
-      ? charge.payment_intent
-      : charge.payment_intent?.id;
+    const paymentIntentId = charge.payment_intent as string;
 
     if (!paymentIntentId) {
       console.error('Payment intent ID not found in charge.refunded event');
@@ -351,9 +349,7 @@ export class WebhookService {
   }
 
   private async handleSubscriptionCreated(subscription: Stripe.Subscription): Promise<void> {
-    const stripeCustomerId = typeof subscription.customer === 'string'
-      ? subscription.customer
-      : subscription.customer?.id;
+    const stripeCustomerId = subscription.customer;
 
     if (!stripeCustomerId) {
       console.error('Customer ID not found in subscription.created event');
@@ -512,11 +508,7 @@ export class WebhookService {
   }
 
   private async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<void> {
-    console.log(invoice);
-
-    const subscriptionId = typeof (invoice as any).subscription === 'string'
-      ? (invoice as any).subscription
-      : (invoice as any).subscription?.id;
+    const subscriptionId = invoice.parent?.subscription_details?.subscription;
 
     if (!subscriptionId) {
       console.error('Subscription ID not found in invoice.payment_succeeded event');
@@ -598,11 +590,7 @@ export class WebhookService {
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
-    console.log(invoice);
-
-    const subscriptionId = typeof (invoice as any).subscription === 'string'
-      ? (invoice as any).subscription
-      : (invoice as any).subscription?.id;
+    const subscriptionId = invoice.parent?.subscription_details?.subscription;
 
     if (!subscriptionId) {
       console.error('Subscription ID not found in invoice.payment_failed event');
