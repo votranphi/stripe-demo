@@ -382,6 +382,21 @@ export class WebhookService {
           throw new Error('User not found for Stripe customer');
         }
 
+        // Determine subscription status based on Stripe subscription status
+        // Only activate if payment is confirmed or trial is active
+        let dbStatus: UserSubscriptionStatus;
+        
+        if (subscription.status === 'trialing' || subscription.status === 'active') {
+          // Safe to activate: either in trial period or payment already succeeded
+          dbStatus = UserSubscriptionStatus.ACTIVE;
+          console.log(`Subscription ${subscription.id} status is ${subscription.status}, setting to ACTIVE`);
+        } else {
+          // Status is 'incomplete', 'incomplete_expired', 'past_due', 'canceled', 'unpaid', etc.
+          // Keep INACTIVE until payment succeeds (handled by invoice.payment_succeeded)
+          dbStatus = UserSubscriptionStatus.INACTIVE;
+          console.log(`Subscription ${subscription.id} status is ${subscription.status}, setting to INACTIVE`);
+        }
+
         // Create or update UserSubscription
         const currentPeriodEnd = new Date((subscription as any).items.data[0].current_period_end * 1000);
 
@@ -391,7 +406,7 @@ export class WebhookService {
             id: crypto.randomUUID(),
             userId: user.id,
             stripeSubscriptionId: subscription.id,
-            status: UserSubscriptionStatus.ACTIVE,
+            status: dbStatus,
             currentPeriodEnd
           },
           {
@@ -401,7 +416,7 @@ export class WebhookService {
           }
         );
 
-        console.log(`UserSubscription created/updated for user ${user.id}, subscription ${subscription.id}`);
+        console.log(`UserSubscription created/updated for user ${user.id}, subscription ${subscription.id}, status ${dbStatus}`);
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
