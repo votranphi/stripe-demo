@@ -90,7 +90,7 @@ export class WebhookService {
     const orderId = session.metadata?.order_id;
     const userId = session.metadata?.user_id;
 
-    if (!orderId) {
+    if (!orderId && session.mode === 'payment') {
       console.error('Order ID not found in session metadata');
       await this.logWebhookEvent(session.id, 'checkout.session.completed', undefined, 'failed', 'Order ID not found in session metadata');
       return;
@@ -127,46 +127,49 @@ export class WebhookService {
           console.log(`Session ${session.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
-        // Get order within transaction
-        const order = await this.orderService.getOrderById(orderId);
-        if (!order) {
-          console.error(`Order ${orderId} not found`);
-          throw new Error('Order not found');
+        // Just do processing on Order if it's a payment's checkout.session (checkout.session has orderId in metadata)
+        if (orderId) {
+          // Get order within transaction
+          const order = await this.orderService.getOrderById(orderId);
+          if (!order) {
+            console.error(`Order ${orderId} not found`);
+            throw new Error('Order not found');
+          }
+
+          // Only process if order is still PENDING
+          if (order.status !== OrderStatus.PENDING) {
+            console.log(`Order ${orderId} is already in ${order.status} status, skipping...`);
+
+            // Update webhool event to success because the order has been proccessed
+            await WebhookEventModel.findOneAndUpdate(
+              { stripeId: session.id },
+              {
+                status: 'success',
+                processedAt: new Date(),
+                errorMessage: `Order already in ${order.status} status`
+              },
+              { session: dbSession }
+            );
+            return;
+          }
+
+          // Save payment_intent ID to order for future refunds
+          if (session.payment_intent && typeof session.payment_intent === 'string') {
+            await this.orderService.savePaymentIntentId(orderId, session.payment_intent);
+          }
+
+          // Update Order status from PENDING to PAID
+          await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PAID);
+          console.log(`Order ${orderId} marked as PAID`);
+
+          // Update status to PROCESSING to signal fulfillment start
+          await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PROCESSING);
+          console.log(`Order ${orderId} marked as PROCESSING`);
+
+          // Create a fresh DRAFT order for the user (new shopping cart)
+          await this.orderService.createNewDraft(userId);
+          console.log(`New draft order created for user ${userId}`);
         }
-
-        // Only process if order is still PENDING
-        if (order.status !== OrderStatus.PENDING) {
-          console.log(`Order ${orderId} is already in ${order.status} status, skipping...`);
-
-          // Update webhool event to success because the order has been proccessed
-          await WebhookEventModel.findOneAndUpdate(
-            { stripeId: session.id },
-            {
-              status: 'success',
-              processedAt: new Date(),
-              errorMessage: `Order already in ${order.status} status`
-            },
-            { session: dbSession }
-          );
-          return;
-        }
-
-        // Save payment_intent ID to order for future refunds
-        if (session.payment_intent && typeof session.payment_intent === 'string') {
-          await this.orderService.savePaymentIntentId(orderId, session.payment_intent);
-        }
-
-        // Update Order status from PENDING to PAID
-        await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PAID);
-        console.log(`Order ${orderId} marked as PAID`);
-
-        // Update status to PROCESSING to signal fulfillment start
-        await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PROCESSING);
-        console.log(`Order ${orderId} marked as PROCESSING`);
-
-        // Create a fresh DRAFT order for the user (new shopping cart)
-        await this.orderService.createNewDraft(userId);
-        console.log(`New draft order created for user ${userId}`);
 
         // Update webhook event to success (rather than create a new one)
         await WebhookEventModel.findOneAndUpdate(
@@ -384,7 +387,7 @@ export class WebhookService {
         }
 
         // Create or update UserSubscription
-        const currentPeriodEnd = new Date((subscription as any).current_period_end * 1000);
+        const currentPeriodEnd = new Date((subscription as any).items.data[0].current_period_end * 1000);
 
         await UserSubscriptionModel.findOneAndUpdate(
           { stripeSubscriptionId: subscription.id },
@@ -509,6 +512,8 @@ export class WebhookService {
   }
 
   private async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<void> {
+    console.log(invoice);
+
     const subscriptionId = typeof (invoice as any).subscription === 'string'
       ? (invoice as any).subscription
       : (invoice as any).subscription?.id;
@@ -593,6 +598,8 @@ export class WebhookService {
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+    console.log(invoice);
+
     const subscriptionId = typeof (invoice as any).subscription === 'string'
       ? (invoice as any).subscription
       : (invoice as any).subscription?.id;
