@@ -666,6 +666,8 @@ export class WebhookService {
     }
   }
 
+  // Helper functions
+
   private async logWebhookEvent(
     stripeId: string,
     eventType: string,
