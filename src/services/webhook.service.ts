@@ -3,8 +3,11 @@ import { PaymentService } from './payment.service.js';
 import { OrderStatus } from '../models/order.model.js';
 import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
+import { UserSubscriptionModel, UserSubscriptionStatus } from '../models/user-subscription.model.js';
+import { UserModel } from '../models/user.model.js';
 import Stripe from 'stripe';
 import Database from '../config/database.js';
+import crypto from 'crypto';
 
 export class WebhookService {
   private readonly orderService: OrderService;
@@ -53,6 +56,26 @@ export class WebhookService {
       case 'charge.refunded':
         await this.saveWebhookEvent(event);
         await this.handleChargeRefunded(event.data.object as Stripe.Charge);
+        break;
+
+      case 'customer.subscription.created':
+        await this.saveWebhookEvent(event);
+        await this.handleSubscriptionCreated(event.data.object as Stripe.Subscription);
+        break;
+
+      case 'customer.subscription.deleted':
+        await this.saveWebhookEvent(event);
+        await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        break;
+
+      case 'invoice.payment_succeeded':
+        await this.saveWebhookEvent(event);
+        await this.handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
+        break;
+
+      case 'invoice.payment_failed':
+        await this.saveWebhookEvent(event);
+        await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
         break;
 
       // Add more event handlers as needed
@@ -313,6 +336,330 @@ export class WebhookService {
           status: 'failed',
           processedAt: new Date(),
           eventType: 'charge.refunded',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { upsert: true }
+      );
+
+      throw error;
+    } finally {
+      await dbSession.endSession();
+    }
+  }
+
+  private async handleSubscriptionCreated(subscription: Stripe.Subscription): Promise<void> {
+    const stripeCustomerId = typeof subscription.customer === 'string'
+      ? subscription.customer
+      : subscription.customer?.id;
+
+    if (!stripeCustomerId) {
+      console.error('Customer ID not found in subscription.created event');
+      await this.logWebhookEvent(subscription.id, 'customer.subscription.created', undefined, 'failed', 'Customer ID not found');
+      return;
+    }
+
+    // Implement DB Transaction
+    const dbSession = await Database.getInstance().startSession();
+
+    try {
+      await dbSession.withTransaction(async () => {
+        // Check Idempotency
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id }).session(dbSession);
+
+        if (existingEvent && existingEvent.status === 'success') {
+          console.log(`Subscription ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          throw new DuplicateProcessingException(`Subscription ${subscription.id} has already been processed`);
+        }
+
+        if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
+          console.log(`Subscription ${subscription.id} has status ${existingEvent.status}, retrying processing...`);
+        }
+
+        // Find user by Stripe Customer ID
+        const user = await UserModel.findOne({ stripeCustomerId }).session(dbSession);
+
+        if (!user) {
+          console.error(`User not found for Stripe customer ${stripeCustomerId}`);
+          throw new Error('User not found for Stripe customer');
+        }
+
+        // Create or update UserSubscription
+        const currentPeriodEnd = new Date((subscription as any).current_period_end * 1000);
+
+        await UserSubscriptionModel.findOneAndUpdate(
+          { stripeSubscriptionId: subscription.id },
+          {
+            id: crypto.randomUUID(),
+            userId: user.id,
+            stripeSubscriptionId: subscription.id,
+            status: UserSubscriptionStatus.ACTIVE,
+            currentPeriodEnd
+          },
+          {
+            upsert: true,
+            session: dbSession,
+            setDefaultsOnInsert: true
+          }
+        );
+
+        console.log(`UserSubscription created/updated for user ${user.id}, subscription ${subscription.id}`);
+
+        // Update webhook event to success
+        await WebhookEventModel.findOneAndUpdate(
+          { stripeId: subscription.id },
+          {
+            status: 'success',
+            processedAt: new Date(),
+            eventType: 'customer.subscription.created',
+            errorMessage: undefined
+          },
+          {
+            upsert: true,
+            session: dbSession
+          }
+        );
+        console.log(`Webhook event updated to success for subscription ${subscription.id}`);
+      });
+    } catch (error) {
+      console.error('Error handling customer.subscription.created:', error);
+
+      // Update webhook event to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { stripeId: subscription.id },
+        {
+          status: 'failed',
+          processedAt: new Date(),
+          eventType: 'customer.subscription.created',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { upsert: true }
+      );
+
+      throw error;
+    } finally {
+      await dbSession.endSession();
+    }
+  }
+
+  private async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
+    // Implement DB Transaction
+    const dbSession = await Database.getInstance().startSession();
+
+    try {
+      await dbSession.withTransaction(async () => {
+        // Check Idempotency
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id, eventType: 'customer.subscription.deleted' }).session(dbSession);
+
+        if (existingEvent && existingEvent.status === 'success') {
+          console.log(`Subscription deletion ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          throw new DuplicateProcessingException(`Subscription deletion ${subscription.id} has already been processed`);
+        }
+
+        if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
+          console.log(`Subscription deletion ${subscription.id} has status ${existingEvent.status}, retrying processing...`);
+        }
+
+        // Find and update UserSubscription
+        const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscription.id }).session(dbSession);
+
+        if (!userSubscription) {
+          console.error(`UserSubscription not found for subscription ${subscription.id}`);
+          throw new Error('UserSubscription not found');
+        }
+
+        // Update status to INACTIVE
+        userSubscription.status = UserSubscriptionStatus.INACTIVE;
+        await userSubscription.save({ session: dbSession });
+
+        console.log(`UserSubscription ${userSubscription.id} marked as INACTIVE`);
+
+        // Update webhook event to success
+        await WebhookEventModel.findOneAndUpdate(
+          { stripeId: subscription.id, eventType: 'customer.subscription.deleted' },
+          {
+            status: 'success',
+            processedAt: new Date(),
+            errorMessage: undefined
+          },
+          {
+            upsert: true,
+            session: dbSession
+          }
+        );
+        console.log(`Webhook event updated to success for subscription deletion ${subscription.id}`);
+      });
+    } catch (error) {
+      console.error('Error handling customer.subscription.deleted:', error);
+
+      // Update webhook event to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { stripeId: subscription.id, eventType: 'customer.subscription.deleted' },
+        {
+          status: 'failed',
+          processedAt: new Date(),
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { upsert: true }
+      );
+
+      throw error;
+    } finally {
+      await dbSession.endSession();
+    }
+  }
+
+  private async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<void> {
+    const subscriptionId = typeof (invoice as any).subscription === 'string'
+      ? (invoice as any).subscription
+      : (invoice as any).subscription?.id;
+
+    if (!subscriptionId) {
+      console.error('Subscription ID not found in invoice.payment_succeeded event');
+      await this.logWebhookEvent(invoice.id, 'invoice.payment_succeeded', undefined, 'failed', 'Subscription ID not found');
+      return;
+    }
+
+    // Implement DB Transaction
+    const dbSession = await Database.getInstance().startSession();
+
+    try {
+      await dbSession.withTransaction(async () => {
+        // Check Idempotency
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id }).session(dbSession);
+
+        if (existingEvent && existingEvent.status === 'success') {
+          console.log(`Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          throw new DuplicateProcessingException(`Invoice ${invoice.id} has already been processed`);
+        }
+
+        if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
+          console.log(`Invoice ${invoice.id} has status ${existingEvent.status}, retrying processing...`);
+        }
+
+        // Find UserSubscription by Stripe subscription ID
+        const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscriptionId }).session(dbSession);
+
+        if (!userSubscription) {
+          console.error(`UserSubscription not found for subscription ${subscriptionId}`);
+          throw new Error('UserSubscription not found');
+        }
+
+        // Update subscription status to ACTIVE and update currentPeriodEnd
+        // Note: invoice.lines.data[0].period.end contains the period end timestamp
+        const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+        if (periodEnd) {
+          userSubscription.currentPeriodEnd = new Date(periodEnd * 1000);
+        }
+        userSubscription.status = UserSubscriptionStatus.ACTIVE;
+        await userSubscription.save({ session: dbSession });
+
+        console.log(`UserSubscription ${userSubscription.id} updated to ACTIVE with period end ${userSubscription.currentPeriodEnd}`);
+
+        // Update webhook event to success
+        await WebhookEventModel.findOneAndUpdate(
+          { stripeId: invoice.id },
+          {
+            status: 'success',
+            processedAt: new Date(),
+            eventType: 'invoice.payment_succeeded',
+            errorMessage: undefined
+          },
+          {
+            upsert: true,
+            session: dbSession
+          }
+        );
+        console.log(`Webhook event updated to success for invoice ${invoice.id}`);
+      });
+    } catch (error) {
+      console.error('Error handling invoice.payment_succeeded:', error);
+
+      // Update webhook event to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { stripeId: invoice.id },
+        {
+          status: 'failed',
+          processedAt: new Date(),
+          eventType: 'invoice.payment_succeeded',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { upsert: true }
+      );
+
+      throw error;
+    } finally {
+      await dbSession.endSession();
+    }
+  }
+
+  private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+    const subscriptionId = typeof (invoice as any).subscription === 'string'
+      ? (invoice as any).subscription
+      : (invoice as any).subscription?.id;
+
+    if (!subscriptionId) {
+      console.error('Subscription ID not found in invoice.payment_failed event');
+      await this.logWebhookEvent(invoice.id, 'invoice.payment_failed', undefined, 'failed', 'Subscription ID not found');
+      return;
+    }
+
+    // Implement DB Transaction
+    const dbSession = await Database.getInstance().startSession();
+
+    try {
+      await dbSession.withTransaction(async () => {
+        // Check Idempotency
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id }).session(dbSession);
+
+        if (existingEvent && existingEvent.status === 'success') {
+          console.log(`Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          throw new DuplicateProcessingException(`Invoice ${invoice.id} has already been processed`);
+        }
+
+        if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
+          console.log(`Invoice ${invoice.id} has status ${existingEvent.status}, retrying processing...`);
+        }
+
+        // Find UserSubscription by Stripe subscription ID
+        const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscriptionId }).session(dbSession);
+
+        if (!userSubscription) {
+          console.error(`UserSubscription not found for subscription ${subscriptionId}`);
+          throw new Error('UserSubscription not found');
+        }
+
+        // Update subscription status to INACTIVE
+        userSubscription.status = UserSubscriptionStatus.INACTIVE;
+        await userSubscription.save({ session: dbSession });
+
+        console.log(`UserSubscription ${userSubscription.id} marked as INACTIVE due to payment failure`);
+
+        // Update webhook event to success
+        await WebhookEventModel.findOneAndUpdate(
+          { stripeId: invoice.id },
+          {
+            status: 'success',
+            processedAt: new Date(),
+            eventType: 'invoice.payment_failed',
+            errorMessage: undefined
+          },
+          {
+            upsert: true,
+            session: dbSession
+          }
+        );
+        console.log(`Webhook event updated to success for invoice ${invoice.id}`);
+      });
+    } catch (error) {
+      console.error('Error handling invoice.payment_failed:', error);
+
+      // Update webhook event to failed
+      await WebhookEventModel.findOneAndUpdate(
+        { stripeId: invoice.id },
+        {
+          status: 'failed',
+          processedAt: new Date(),
+          eventType: 'invoice.payment_failed',
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         },
         { upsert: true }
