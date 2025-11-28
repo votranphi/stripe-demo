@@ -2,13 +2,14 @@ import express from 'express';
 import dotenv from 'dotenv';
 import Database from './config/database.js';
 import apiRoutes from './routes/index.js';
-import { errorHandler } from './middlewares/error.middleware.js';
+import { ErrorMiddleware } from './middlewares/error.middleware.js';
 import { CronService } from './services/cron.service.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT;
+const errorMiddleware = new ErrorMiddleware();
 
 // Webhook endpoint needs raw body for signature verification
 app.use('/api/v1/webhook', express.raw({ type: 'application/json' }));
@@ -21,7 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', apiRoutes);
 
 // Middleware for error handler (avoid many try-catch terms in code)
-app.use(errorHandler);
+app.use(errorMiddleware.handle);
 
 // 404 handler (cannot use CustomError here because this route isn't handled by ErrorMiddleware)
 app.use((req, res) => {

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { SubscriptionService } from '../services/subscription.service.js';
 import { CreateSubscriptionCheckoutDTO } from '../dtos/subscription.dto.js';
-import { asyncHandler } from '../middlewares/error.middleware.js';
+import { ErrorMiddleware } from '../middlewares/error.middleware.js';
 import { UnauthorizedException } from '../errors/CustomError.js';
 
 export class SubscriptionController {
@@ -16,7 +16,7 @@ export class SubscriptionController {
   }
 
   // POST /api/v1/subscriptions/checkout/create-session
-  createCheckoutSession = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  createCheckoutSession = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException();

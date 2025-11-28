@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service.js';
 import { RegisterDTO, LoginDTO } from '../dtos/auth.dto.js';
-import { asyncHandler } from '../middlewares/error.middleware.js';
+import { ErrorMiddleware } from '../middlewares/error.middleware.js';
 
 export class AuthController {
   private authService: AuthService | null = null;
@@ -15,7 +15,7 @@ export class AuthController {
   }
 
   // POST /api/v1/auth/register
-  register = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  register = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     // Validate request body using DTO
     const dto = new RegisterDTO(req.body);
     // Register user
@@ -34,7 +34,7 @@ export class AuthController {
   });
 
   // POST /api/v1/auth/login
-  login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  login = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     // Validate request body using DTO
     const dto = new LoginDTO(req.body);
     // Login user

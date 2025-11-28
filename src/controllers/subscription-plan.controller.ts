@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { SubscriptionPlanService } from '../services/subscription-plan.service.js';
 import { CreateUpdateSubscriptionPlanDTO } from '../dtos/subscription-plan.dto.js';
-import { asyncHandler } from '../middlewares/error.middleware.js';
+import { ErrorMiddleware } from '../middlewares/error.middleware.js';
 import { SubscriptionPlanNotFoundException } from '../errors/CustomError.js';
 
 export class SubscriptionPlanController {
@@ -16,7 +16,7 @@ export class SubscriptionPlanController {
   }
 
   // GET /api/v1/subscription-plans
-  getAllPlans = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getAllPlans = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     
@@ -34,7 +34,7 @@ export class SubscriptionPlanController {
   });
 
   // POST /api/v1/subscription-plans
-  createPlan = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  createPlan = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const dto = new CreateUpdateSubscriptionPlanDTO(req.body);
     const plan = await this.getSubscriptionPlanService().createPlan(dto);
     res.status(201).json({
@@ -44,7 +44,7 @@ export class SubscriptionPlanController {
   });
 
   // GET /api/v1/subscription-plans/:id
-  getPlanById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getPlanById = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     const plan = await this.getSubscriptionPlanService().getPlanById(id);
     if (!plan) {
@@ -54,7 +54,7 @@ export class SubscriptionPlanController {
   });
 
   // PUT /api/v1/subscription-plans/:id
-  updatePlan = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  updatePlan = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     // Validate request body using DTO
     const dto = new CreateUpdateSubscriptionPlanDTO(req.body);
@@ -66,7 +66,7 @@ export class SubscriptionPlanController {
   });
 
   // DELETE /api/v1/subscription-plans/:id
-  deletePlan = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  deletePlan = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     const deleted = await this.getSubscriptionPlanService().deletePlan(id);
     if (!deleted) {
