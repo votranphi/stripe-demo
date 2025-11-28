@@ -118,8 +118,8 @@ export class WebhookService {
 
     try {
       await dbSession.withTransaction(async () => {
-        // Check Idempotency - only throw error if event has been successfully proccessed
-        const existingEvent = await WebhookEventModel.findOne({ stripeId: session.id }).session(dbSession);
+        // Check Idempotency
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: session.id, eventType: WebhookEvents.CHECKOUT_SESSION_COMPLETED }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
           console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Session ${session.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
@@ -146,7 +146,7 @@ export class WebhookService {
 
             // Update webhool event to success because the order has been proccessed
             await WebhookEventModel.findOneAndUpdate(
-              { stripeId: session.id },
+              { stripeId: session.id, eventType: WebhookEvents.CHECKOUT_SESSION_COMPLETED },
               {
                 status: 'success',
                 processedAt: new Date(),
@@ -177,7 +177,7 @@ export class WebhookService {
 
         // Update webhook event to success (rather than create a new one)
         await WebhookEventModel.findOneAndUpdate(
-          { stripeId: session.id },
+          { stripeId: session.id, eventType: WebhookEvents.CHECKOUT_SESSION_COMPLETED },
           {
             status: 'success',
             processedAt: new Date(),
@@ -197,7 +197,7 @@ export class WebhookService {
 
       // Update webhook event to failed (rather than create a new one)
       await WebhookEventModel.findOneAndUpdate(
-        { stripeId: session.id },
+        { stripeId: session.id, eventType: WebhookEvents.CHECKOUT_SESSION_COMPLETED },
         {
           status: 'failed',
           processedAt: new Date(),
@@ -270,8 +270,8 @@ export class WebhookService {
 
     try {
       await dbSession.withTransaction(async () => {
-        // Check Idempotency - only throw error if event has been successfully processed
-        const existingEvent = await WebhookEventModel.findOne({ stripeId: charge.id }).session(dbSession);
+        // Check Idempotency
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: charge.id, eventType: WebhookEvents.CHARGE_REFUNDED }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
           console.log(`[${WebhookEvents.CHARGE_REFUNDED}] Charge ${charge.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
@@ -297,7 +297,7 @@ export class WebhookService {
 
           // Update webhook event to success because the order has been processed
           await WebhookEventModel.findOneAndUpdate(
-            { stripeId: charge.id },
+            { stripeId: charge.id, eventType: WebhookEvents.CHARGE_REFUNDED },
             {
               status: 'success',
               processedAt: new Date(),
@@ -316,7 +316,7 @@ export class WebhookService {
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
-          { stripeId: charge.id },
+          { stripeId: charge.id, eventType: WebhookEvents.CHARGE_REFUNDED },
           {
             status: 'success',
             processedAt: new Date(),
@@ -336,7 +336,7 @@ export class WebhookService {
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
-        { stripeId: charge.id },
+        { stripeId: charge.id, eventType: WebhookEvents.CHARGE_REFUNDED },
         {
           status: 'failed',
           processedAt: new Date(),
@@ -367,7 +367,7 @@ export class WebhookService {
     try {
       await dbSession.withTransaction(async () => {
         // Check Idempotency
-        const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id }).session(dbSession);
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id, eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
           console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Subscription ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
@@ -414,7 +414,7 @@ export class WebhookService {
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
-          { stripeId: subscription.id },
+          { stripeId: subscription.id, eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED },
           {
             status: 'success',
             processedAt: new Date(),
@@ -433,7 +433,7 @@ export class WebhookService {
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
-        { stripeId: subscription.id },
+        { stripeId: subscription.id, eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED },
         {
           status: 'failed',
           processedAt: new Date(),
@@ -534,7 +534,7 @@ export class WebhookService {
     try {
       await dbSession.withTransaction(async () => {
         // Check Idempotency
-        const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id }).session(dbSession);
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id, eventType: WebhookEvents.INVOICE_PAYMENT_SUCCEEDED }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
           console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
@@ -576,7 +576,7 @@ export class WebhookService {
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
-          { stripeId: invoice.id },
+          { stripeId: invoice.id, eventType: WebhookEvents.INVOICE_PAYMENT_SUCCEEDED },
           {
             status: 'success',
             processedAt: new Date(),
@@ -595,7 +595,7 @@ export class WebhookService {
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
-        { stripeId: invoice.id },
+        { stripeId: invoice.id, eventType: WebhookEvents.INVOICE_PAYMENT_SUCCEEDED },
         {
           status: 'failed',
           processedAt: new Date(),
@@ -626,7 +626,7 @@ export class WebhookService {
     try {
       await dbSession.withTransaction(async () => {
         // Check Idempotency
-        const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id }).session(dbSession);
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id, eventType: WebhookEvents.INVOICE_PAYMENT_FAILED }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
           console.log(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
@@ -656,7 +656,7 @@ export class WebhookService {
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
-          { stripeId: invoice.id },
+          { stripeId: invoice.id, eventType: WebhookEvents.INVOICE_PAYMENT_FAILED },
           {
             status: 'success',
             processedAt: new Date(),
@@ -675,7 +675,7 @@ export class WebhookService {
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
-        { stripeId: invoice.id },
+        { stripeId: invoice.id, eventType: WebhookEvents.INVOICE_PAYMENT_FAILED },
         {
           status: 'failed',
           processedAt: new Date(),
