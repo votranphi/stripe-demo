@@ -732,7 +732,7 @@ export class WebhookService {
       });
 
       await webhookEvent.save();
-      console.log(`Webhook event ${event.type} saved for Stripe resource ${stripeId}`);
+      console.log(`[${event.type}] Webhook event saved for Stripe resource ${stripeId}`);
     } catch (error) {
       console.error('Failed to save webhook event:', error);
       // Don't throw to avoid blocking webhook processing
