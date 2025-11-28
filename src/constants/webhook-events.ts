@@ -6,6 +6,9 @@ export const WebhookEvents = {
   // Charge Events
   CHARGE_REFUNDED: 'charge.refunded',
   
+  // Customer Events
+  CUSTOMER_UPDATED: 'customer.updated',
+  
   // Subscription Events
   CUSTOMER_SUBSCRIPTION_CREATED: 'customer.subscription.created',
   CUSTOMER_SUBSCRIPTION_DELETED: 'customer.subscription.deleted',
