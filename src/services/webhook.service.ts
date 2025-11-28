@@ -92,20 +92,20 @@ export class WebhookService {
     const userId = session.metadata?.user_id;
 
     if (!orderId && session.mode === 'payment') {
-      console.error('Order ID not found in session metadata');
+      console.error(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Order ID not found in session metadata`);
       await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, undefined, 'failed', 'Order ID not found in session metadata');
       return;
     }
 
     if (!userId) {
-      console.error('User ID not found in session metadata');
+      console.error(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] User ID not found in session metadata`);
       await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, orderId, 'failed', 'User ID not found in session metadata');
       return;
     }
 
     // Verify payment status before starting transaction
     if (session.payment_status !== 'paid') {
-      console.log(`Payment not completed for session ${session.id}`);
+      console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Payment not completed for session ${session.id}`);
       await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, orderId, 'failed', 'Payment not completed');
       return;
     }
@@ -119,13 +119,13 @@ export class WebhookService {
         const existingEvent = await WebhookEventModel.findOne({ stripeId: session.id }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
-          console.log(`Session ${session.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Session ${session.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Session ${session.id} has already been processed`);
         }
 
         // If existingEvent and the status is 'pending' or 'failed', accept retry logic
         if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
-          console.log(`Session ${session.id} has status ${existingEvent.status}, retrying processing...`);
+          console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Session ${session.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Just do processing on Order if it's a payment's checkout.session (checkout.session has orderId in metadata)
@@ -133,13 +133,13 @@ export class WebhookService {
           // Get order within transaction
           const order = await this.orderService.getOrderById(orderId);
           if (!order) {
-            console.error(`Order ${orderId} not found`);
+            console.error(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Order ${orderId} not found`);
             throw new Error('Order not found');
           }
 
           // Only process if order is still PENDING
           if (order.status !== OrderStatus.PENDING) {
-            console.log(`Order ${orderId} is already in ${order.status} status, skipping...`);
+            console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Order ${orderId} is already in ${order.status} status, skipping...`);
 
             // Update webhool event to success because the order has been proccessed
             await WebhookEventModel.findOneAndUpdate(
@@ -161,15 +161,15 @@ export class WebhookService {
 
           // Update Order status from PENDING to PAID
           await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PAID);
-          console.log(`Order ${orderId} marked as PAID`);
+          console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Order ${orderId} marked as PAID`);
 
           // Update status to PROCESSING to signal fulfillment start
           await this.orderService.updateOrderStatusWithRetry(orderId, OrderStatus.PROCESSING);
-          console.log(`Order ${orderId} marked as PROCESSING`);
+          console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Order ${orderId} marked as PROCESSING`);
 
           // Create a fresh DRAFT order for the user (new shopping cart)
           await this.orderService.createNewDraft(userId);
-          console.log(`New draft order created for user ${userId}`);
+          console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] New draft order created for user ${userId}`);
         }
 
         // Update webhook event to success (rather than create a new one)
@@ -187,10 +187,10 @@ export class WebhookService {
             session: dbSession
           }
         );
-        console.log(`Webhook event updated to success for session ${session.id}`);
+        console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Webhook event updated to success for session ${session.id}`);
       });
     } catch (error) {
-      console.error(`Error handling ${WebhookEvents.CHECKOUT_SESSION_COMPLETED}:`, error);
+      console.error(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Error handling event:`, error);
 
       // Update webhook event to failed (rather than create a new one)
       await WebhookEventModel.findOneAndUpdate(
@@ -215,7 +215,7 @@ export class WebhookService {
     const orderId = session.metadata?.order_id;
 
     if (!orderId) {
-      console.error('Order ID not found in expired session metadata');
+      console.error(`[${WebhookEvents.CHECKOUT_SESSION_EXPIRED}] Order ID not found in expired session metadata`);
       return;
     }
 
@@ -223,14 +223,14 @@ export class WebhookService {
       const order = await this.orderService.getOrderById(orderId);
 
       if (!order) {
-        console.error(`Order ${orderId} not found`);
+        console.error(`[${WebhookEvents.CHECKOUT_SESSION_EXPIRED}] Order ${orderId} not found`);
         return;
       }
 
       // Only update if order is still pending
       if (order.status === OrderStatus.PENDING) {
         await this.orderService.updateOrderStatus(orderId, OrderStatus.CANCELLED);
-        console.log(`Order ${orderId} marked as CANCELLED due to session expiration`);
+        console.log(`[${WebhookEvents.CHECKOUT_SESSION_EXPIRED}] Order ${orderId} marked as CANCELLED due to session expiration`);
 
         // Update webhook event status
         await WebhookEventModel.findOneAndUpdate(
@@ -239,7 +239,7 @@ export class WebhookService {
         );
       }
     } catch (error) {
-      console.error(`Error handling ${WebhookEvents.CHECKOUT_SESSION_EXPIRED}:`, error);
+      console.error(`[${WebhookEvents.CHECKOUT_SESSION_EXPIRED}] Error handling event:`, error);
 
       // Update webhook event status to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -257,7 +257,7 @@ export class WebhookService {
     const paymentIntentId = charge.payment_intent as string;
 
     if (!paymentIntentId) {
-      console.error(`Payment intent ID not found in ${WebhookEvents.CHARGE_REFUNDED} event`);
+      console.error(`[${WebhookEvents.CHARGE_REFUNDED}] Payment intent ID not found in event`);
       await this.logWebhookEvent(charge.id, WebhookEvents.CHARGE_REFUNDED, undefined, 'failed', 'Payment intent ID not found');
       return;
     }
@@ -271,26 +271,26 @@ export class WebhookService {
         const existingEvent = await WebhookEventModel.findOne({ stripeId: charge.id }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
-          console.log(`Charge ${charge.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          console.log(`[${WebhookEvents.CHARGE_REFUNDED}] Charge ${charge.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Charge ${charge.id} has already been processed`);
         }
 
         // If existingEvent and the status is 'pending' or 'failed', accept retry logic
         if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
-          console.log(`Charge ${charge.id} has status ${existingEvent.status}, retrying processing...`);
+          console.log(`[${WebhookEvents.CHARGE_REFUNDED}] Charge ${charge.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Find order by payment intent ID
         const order = await this.orderService.getOrderByPaymentIntentId(paymentIntentId);
 
         if (!order) {
-          console.error(`Order not found for payment intent ${paymentIntentId}`);
+          console.error(`[${WebhookEvents.CHARGE_REFUNDED}] Order not found for payment intent ${paymentIntentId}`);
           throw new Error('Order not found for payment intent');
         }
 
         // Only process if order is not already CANCELLED
         if (order.status === OrderStatus.CANCELLED) {
-          console.log(`Order ${order.id} is already CANCELLED, skipping...`);
+          console.log(`[${WebhookEvents.CHARGE_REFUNDED}] Order ${order.id} is already CANCELLED, skipping...`);
 
           // Update webhook event to success because the order has been processed
           await WebhookEventModel.findOneAndUpdate(
@@ -309,7 +309,7 @@ export class WebhookService {
         // Update order status to CANCELLED with skipRefund = true
         // This will restock items but skip calling Stripe refund API
         await this.orderService.updateOrderStatus(order.id, OrderStatus.CANCELLED, true);
-        console.log(`Order ${order.id} marked as CANCELLED due to Stripe Dashboard refund (skipRefund=true)`);
+        console.log(`[${WebhookEvents.CHARGE_REFUNDED}] Order ${order.id} marked as CANCELLED due to Stripe Dashboard refund (skipRefund=true)`);
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
@@ -326,10 +326,10 @@ export class WebhookService {
             session: dbSession
           }
         );
-        console.log(`Webhook event updated to success for charge ${charge.id}`);
+        console.log(`[${WebhookEvents.CHARGE_REFUNDED}] Webhook event updated to success for charge ${charge.id}`);
       });
     } catch (error) {
-      console.error(`Error handling ${WebhookEvents.CHARGE_REFUNDED}:`, error);
+      console.error(`[${WebhookEvents.CHARGE_REFUNDED}] Error handling event:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -353,7 +353,7 @@ export class WebhookService {
     const stripeCustomerId = subscription.customer;
 
     if (!stripeCustomerId) {
-      console.error('Customer ID not found in subscription.created event');
+      console.error(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Customer ID not found in subscription.created event`);
       await this.logWebhookEvent(subscription.id, WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED, undefined, 'failed', 'Customer ID not found');
       return;
     }
@@ -367,19 +367,19 @@ export class WebhookService {
         const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
-          console.log(`Subscription ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Subscription ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Subscription ${subscription.id} has already been processed`);
         }
 
         if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
-          console.log(`Subscription ${subscription.id} has status ${existingEvent.status}, retrying processing...`);
+          console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Subscription ${subscription.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Find user by Stripe Customer ID
         const user = await UserModel.findOne({ stripeCustomerId }).session(dbSession);
 
         if (!user) {
-          console.error(`User not found for Stripe customer ${stripeCustomerId}`);
+          console.error(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] User not found for Stripe customer ${stripeCustomerId}`);
           throw new Error('User not found for Stripe customer');
         }
 
@@ -388,12 +388,12 @@ export class WebhookService {
         
         if (subscription.status === 'trialing' || subscription.status === 'active') {
           dbStatus = UserSubscriptionStatus.ACTIVE;
-          console.log(`Subscription ${subscription.id} status is ${subscription.status}, setting to ACTIVE`);
+          console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Subscription ${subscription.id} status is ${subscription.status}, setting to ACTIVE`);
         } else {
           // Status is 'incomplete', 'incomplete_expired', 'past_due', 'canceled', 'unpaid', etc.
           // Keep INACTIVE until payment succeeds (handled by invoice.payment_succeeded)
           dbStatus = UserSubscriptionStatus.INACTIVE;
-          console.log(`Subscription ${subscription.id} status is ${subscription.status}, setting to INACTIVE`);
+          console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Subscription ${subscription.id} status is ${subscription.status}, setting to INACTIVE`);
         }
 
         // Create or update UserSubscription
@@ -415,7 +415,7 @@ export class WebhookService {
           }
         );
 
-        console.log(`UserSubscription created/updated for user ${user.id}, subscription ${subscription.id}, status ${dbStatus}`);
+        console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] UserSubscription created/updated for user ${user.id}, subscription ${subscription.id}, status ${dbStatus}`);
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
@@ -431,10 +431,10 @@ export class WebhookService {
             session: dbSession
           }
         );
-        console.log(`Webhook event updated to success for subscription ${subscription.id}`);
+        console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Webhook event updated to success for subscription ${subscription.id}`);
       });
     } catch (error) {
-      console.error(`Error handling ${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}:`, error);
+      console.error(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Error handling event:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -464,19 +464,19 @@ export class WebhookService {
         const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id, eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
-          console.log(`Subscription deletion ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] Subscription deletion ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Subscription deletion ${subscription.id} has already been processed`);
         }
 
         if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
-          console.log(`Subscription deletion ${subscription.id} has status ${existingEvent.status}, retrying processing...`);
+          console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] Subscription deletion ${subscription.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Find and update UserSubscription
         const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscription.id }).session(dbSession);
 
         if (!userSubscription) {
-          console.error(`UserSubscription not found for subscription ${subscription.id}`);
+          console.error(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] UserSubscription not found for subscription ${subscription.id}`);
           throw new Error('UserSubscription not found');
         }
 
@@ -484,7 +484,7 @@ export class WebhookService {
         userSubscription.status = UserSubscriptionStatus.INACTIVE;
         await userSubscription.save({ session: dbSession });
 
-        console.log(`UserSubscription ${userSubscription.id} marked as INACTIVE`);
+        console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] UserSubscription ${userSubscription.id} marked as INACTIVE`);
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
@@ -499,10 +499,10 @@ export class WebhookService {
             session: dbSession
           }
         );
-        console.log(`Webhook event updated to success for subscription deletion ${subscription.id}`);
+        console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] Webhook event updated to success for subscription deletion ${subscription.id}`);
       });
     } catch (error) {
-      console.error(`Error handling ${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}:`, error);
+      console.error(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] Error handling event:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -525,7 +525,7 @@ export class WebhookService {
     const subscriptionId = invoice.parent?.subscription_details?.subscription;
 
     if (!subscriptionId) {
-      console.error(`Subscription ID not found in ${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED} event`);
+      console.error(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Subscription ID not found in event`);
       await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_SUCCEEDED, undefined, 'failed', 'Subscription ID not found');
       return;
     }
@@ -539,19 +539,19 @@ export class WebhookService {
         const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
-          console.log(`Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Invoice ${invoice.id} has already been processed`);
         }
 
         if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
-          console.log(`Invoice ${invoice.id} has status ${existingEvent.status}, retrying processing...`);
+          console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Invoice ${invoice.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Find UserSubscription by Stripe subscription ID
         const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscriptionId }).session(dbSession);
 
         if (!userSubscription) {
-          console.error(`UserSubscription not found for subscription ${subscriptionId}`);
+          console.error(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] UserSubscription not found for subscription ${subscriptionId}`);
           throw new Error('UserSubscription not found');
         }
 
@@ -564,7 +564,7 @@ export class WebhookService {
         userSubscription.status = UserSubscriptionStatus.ACTIVE;
         await userSubscription.save({ session: dbSession });
 
-        console.log(`UserSubscription ${userSubscription.id} updated to ACTIVE with period end ${userSubscription.currentPeriodEnd}`);
+        console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] UserSubscription ${userSubscription.id} updated to ACTIVE with period end ${userSubscription.currentPeriodEnd}`);
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
@@ -580,10 +580,10 @@ export class WebhookService {
             session: dbSession
           }
         );
-        console.log(`Webhook event updated to success for invoice ${invoice.id}`);
+        console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Webhook event updated to success for invoice ${invoice.id}`);
       });
     } catch (error) {
-      console.error(`Error handling ${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}:`, error);
+      console.error(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Error handling event:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -607,7 +607,7 @@ export class WebhookService {
     const subscriptionId = invoice.parent?.subscription_details?.subscription;
 
     if (!subscriptionId) {
-      console.error(`Subscription ID not found in ${WebhookEvents.INVOICE_PAYMENT_FAILED} event`);
+      console.error(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Subscription ID not found in event`);
       await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_FAILED, undefined, 'failed', 'Subscription ID not found');
       return;
     }
@@ -621,19 +621,19 @@ export class WebhookService {
         const existingEvent = await WebhookEventModel.findOne({ stripeId: invoice.id }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
-          console.log(`Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
+          console.log(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Invoice ${invoice.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
           throw new DuplicateProcessingException(`Invoice ${invoice.id} has already been processed`);
         }
 
         if (existingEvent && (existingEvent.status === 'pending' || existingEvent.status === 'failed')) {
-          console.log(`Invoice ${invoice.id} has status ${existingEvent.status}, retrying processing...`);
+          console.log(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Invoice ${invoice.id} has status ${existingEvent.status}, retrying processing...`);
         }
 
         // Find UserSubscription by Stripe subscription ID
         const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscriptionId }).session(dbSession);
 
         if (!userSubscription) {
-          console.error(`UserSubscription not found for subscription ${subscriptionId}`);
+          console.error(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] UserSubscription not found for subscription ${subscriptionId}`);
           throw new Error('UserSubscription not found');
         }
 
@@ -641,7 +641,7 @@ export class WebhookService {
         userSubscription.status = UserSubscriptionStatus.INACTIVE;
         await userSubscription.save({ session: dbSession });
 
-        console.log(`UserSubscription ${userSubscription.id} marked as INACTIVE due to payment failure`);
+        console.log(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] UserSubscription ${userSubscription.id} marked as INACTIVE due to payment failure`);
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
@@ -657,10 +657,10 @@ export class WebhookService {
             session: dbSession
           }
         );
-        console.log(`Webhook event updated to success for invoice ${invoice.id}`);
+        console.log(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Webhook event updated to success for invoice ${invoice.id}`);
       });
     } catch (error) {
-      console.error(`Error handling ${WebhookEvents.INVOICE_PAYMENT_FAILED}:`, error);
+      console.error(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Error handling event:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
