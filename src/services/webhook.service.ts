@@ -1,25 +1,28 @@
 import { OrderService } from './order.service.js';
 import { PaymentService } from './payment.service.js';
+import { UserSubscriptionService } from './user-subscription.service.js';
 import { OrderStatus } from '../models/order.model.js';
 import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
-import { UserSubscriptionModel, UserSubscriptionStatus } from '../models/user-subscription.model.js';
+import { UserSubscriptionStatus } from '../models/user-subscription.model.js';
 import { UserModel } from '../models/user.model.js';
 import { WebhookEvents } from '../constants/webhook-events.js';
 import Stripe from 'stripe';
 import Database from '../config/database.js';
-import crypto from 'crypto';
 
 export class WebhookService {
   private readonly orderService: OrderService;
   private readonly paymentService: PaymentService;
+  private readonly userSubscriptionService: UserSubscriptionService;
 
   constructor(
     orderService?: OrderService,
-    paymentService?: PaymentService
+    paymentService?: PaymentService,
+    userSubscriptionService?: UserSubscriptionService
   ) {
     this.orderService = orderService || new OrderService();
     this.paymentService = paymentService || new PaymentService();
+    this.userSubscriptionService = userSubscriptionService || new UserSubscriptionService();
   }
 
   async handleWebhookEvent(payload: Buffer, signature: string): Promise<void> {
@@ -399,20 +402,12 @@ export class WebhookService {
         // Create or update UserSubscription
         const currentPeriodEnd = new Date((subscription as any).items.data[0].current_period_end * 1000);
 
-        await UserSubscriptionModel.findOneAndUpdate(
-          { stripeSubscriptionId: subscription.id },
-          {
-            id: crypto.randomUUID(),
-            userId: user.id,
-            stripeSubscriptionId: subscription.id,
-            status: dbStatus,
-            currentPeriodEnd
-          },
-          {
-            upsert: true,
-            session: dbSession,
-            setDefaultsOnInsert: true
-          }
+        await this.userSubscriptionService.createOrUpdate(
+          subscription.id,
+          user.id,
+          dbStatus,
+          currentPeriodEnd,
+          dbSession
         );
 
         console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] UserSubscription created/updated for user ${user.id}, subscription ${subscription.id}, status ${dbStatus}`);
@@ -473,7 +468,7 @@ export class WebhookService {
         }
 
         // Find and update UserSubscription
-        const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscription.id }).session(dbSession);
+        const userSubscription = await this.userSubscriptionService.findByStripeSubscriptionId(subscription.id, dbSession);
 
         if (!userSubscription) {
           console.error(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] UserSubscription not found for subscription ${subscription.id}`);
@@ -481,8 +476,11 @@ export class WebhookService {
         }
 
         // Update status to INACTIVE
-        userSubscription.status = UserSubscriptionStatus.INACTIVE;
-        await userSubscription.save({ session: dbSession });
+        await this.userSubscriptionService.updateStatus(
+          subscription.id,
+          UserSubscriptionStatus.INACTIVE,
+          dbSession
+        );
 
         console.log(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}] UserSubscription ${userSubscription.id} marked as INACTIVE`);
 
@@ -522,7 +520,7 @@ export class WebhookService {
   }
 
   private async handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<void> {
-    const subscriptionId = invoice.parent?.subscription_details?.subscription;
+    const subscriptionId = invoice.parent?.subscription_details?.subscription as string;
 
     if (!subscriptionId) {
       console.error(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Subscription ID not found in event`);
@@ -548,7 +546,7 @@ export class WebhookService {
         }
 
         // Find UserSubscription by Stripe subscription ID
-        const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscriptionId }).session(dbSession);
+        const userSubscription = await this.userSubscriptionService.findByStripeSubscriptionId(subscriptionId, dbSession);
 
         if (!userSubscription) {
           console.error(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] UserSubscription not found for subscription ${subscriptionId}`);
@@ -559,12 +557,22 @@ export class WebhookService {
         // Note: invoice.lines.data[0].period.end contains the period end timestamp
         const periodEnd = invoice.lines?.data?.[0]?.period?.end;
         if (periodEnd) {
-          userSubscription.currentPeriodEnd = new Date(periodEnd * 1000);
+          const currentPeriodEnd = new Date(periodEnd * 1000);
+          await this.userSubscriptionService.updateStatusAndPeriodEnd(
+            subscriptionId,
+            UserSubscriptionStatus.ACTIVE,
+            currentPeriodEnd,
+            dbSession
+          );
+          console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] UserSubscription ${userSubscription.id} updated to ACTIVE with period end ${currentPeriodEnd}`);
+        } else {
+          await this.userSubscriptionService.updateStatus(
+            subscriptionId,
+            UserSubscriptionStatus.ACTIVE,
+            dbSession
+          );
+          console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] UserSubscription ${userSubscription.id} updated to ACTIVE`);
         }
-        userSubscription.status = UserSubscriptionStatus.ACTIVE;
-        await userSubscription.save({ session: dbSession });
-
-        console.log(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] UserSubscription ${userSubscription.id} updated to ACTIVE with period end ${userSubscription.currentPeriodEnd}`);
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
@@ -604,7 +612,7 @@ export class WebhookService {
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
-    const subscriptionId = invoice.parent?.subscription_details?.subscription;
+    const subscriptionId = invoice.parent?.subscription_details?.subscription as string;
 
     if (!subscriptionId) {
       console.error(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Subscription ID not found in event`);
@@ -630,7 +638,7 @@ export class WebhookService {
         }
 
         // Find UserSubscription by Stripe subscription ID
-        const userSubscription = await UserSubscriptionModel.findOne({ stripeSubscriptionId: subscriptionId }).session(dbSession);
+        const userSubscription = await this.userSubscriptionService.findByStripeSubscriptionId(subscriptionId, dbSession);
 
         if (!userSubscription) {
           console.error(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] UserSubscription not found for subscription ${subscriptionId}`);
@@ -638,8 +646,11 @@ export class WebhookService {
         }
 
         // Update subscription status to INACTIVE
-        userSubscription.status = UserSubscriptionStatus.INACTIVE;
-        await userSubscription.save({ session: dbSession });
+        await this.userSubscriptionService.updateStatus(
+          subscriptionId,
+          UserSubscriptionStatus.INACTIVE,
+          dbSession
+        );
 
         console.log(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] UserSubscription ${userSubscription.id} marked as INACTIVE due to payment failure`);
 

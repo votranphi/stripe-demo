@@ -1,9 +1,9 @@
 import Database from '../config/database.js';
 import { Order, OrderModel, OrderStatus, OrderLineItem } from '../models/order.model.js';
-import { UserModel } from '../models/user.model.js';
+import { UserService } from './user.service.js';
 import { ProductService } from './product.service.js';
 import { PaymentService } from './payment.service.js';
-import { ProductModel, ProductType } from '../models/product.model.js';
+import { ProductType } from '../models/product.model.js';
 import mongoose from 'mongoose';
 import {
   ProductNotFoundException,
@@ -18,20 +18,23 @@ import {
 } from '../errors/CustomError.js';
 
 export class OrderService {
+  private readonly userService: UserService;
   private readonly productService: ProductService;
   private readonly paymentService: PaymentService;
 
   constructor(
+    userService?: UserService,
     productService?: ProductService,
     paymentService?: PaymentService
   ) {
+    this.userService = userService || new UserService();
     this.productService = productService || new ProductService();
     this.paymentService = paymentService || new PaymentService();
   }
 
   async getUserDraft(userId: string): Promise<Order> {
     try {
-      const user = await UserModel.findOne({ id: userId });
+      const user = await this.userService.findById(userId);
       if (!user) {
         throw new DraftOrderNotFoundException(userId);
       }
@@ -369,10 +372,7 @@ export class OrderService {
       await draftOrder.save();
 
       // Update user's draftOrderId reference
-      await UserModel.findOneAndUpdate(
-        { id: userId },
-        { $set: { draftOrderId: draftOrder.id } }
-      );
+      await this.userService.updateDraftOrderId(userId, draftOrder.id);
 
       return {
         id: draftOrder.id,
@@ -669,15 +669,13 @@ export class OrderService {
 
   private async incrementProductStock(lineItems: OrderLineItem[], session?: mongoose.ClientSession): Promise<void> {
     for (const item of lineItems) {
-      // Use direct MongoDB query with session instead of ProductService to ensure the operation is part of the transaction
-      const product = await ProductModel.findOne({ id: item.productId }).session(session || null);
+      // Get product to verify it exists
+      const product = await this.productService.getProductById(item.productId);
       if (product) {
-        // Add back the quantity to stock using atomic increment
-        await ProductModel.findOneAndUpdate(
-          { id: item.productId },
-          { $inc: { stock: item.quantity } },
-          { session: session || undefined }
-        );
+        // Add back the quantity to stock
+        await this.productService.updateProduct(item.productId, {
+          stock: product.stock + item.quantity
+        });
       }
     }
   }

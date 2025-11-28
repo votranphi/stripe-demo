@@ -1,5 +1,5 @@
-import { SubscriptionPlanModel } from '../models/subscription-plan.model.js';
-import { UserModel } from '../models/user.model.js';
+import { SubscriptionPlanService } from './subscription-plan.service.js';
+import { UserService } from './user.service.js';
 import { PaymentService } from './payment.service.js';
 import {
   SubscriptionPlanNotFoundException,
@@ -8,9 +8,17 @@ import {
 } from '../errors/CustomError.js';
 
 export class SubscriptionService {
+  private readonly subscriptionPlanService: SubscriptionPlanService;
+  private readonly userService: UserService;
   private readonly paymentService: PaymentService;
 
-  constructor(paymentService?: PaymentService) {
+  constructor(
+    subscriptionPlanService?: SubscriptionPlanService,
+    userService?: UserService,
+    paymentService?: PaymentService
+  ) {
+    this.subscriptionPlanService = subscriptionPlanService || new SubscriptionPlanService();
+    this.userService = userService || new UserService();
     this.paymentService = paymentService || new PaymentService();
   }
 
@@ -20,13 +28,13 @@ export class SubscriptionService {
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     try {
       // Validate that the subscription plan exists
-      const plan = await SubscriptionPlanModel.findOne({ id: planId });
+      const plan = await this.subscriptionPlanService.getPlanById(planId);
       if (!plan) {
         throw new SubscriptionPlanNotFoundException(planId);
       }
 
       // Get user to retrieve email
-      const user = await UserModel.findOne({ id: userId });
+      const user = await this.userService.findById(userId);
       if (!user) {
         throw new DatabaseException('User not found');
       }

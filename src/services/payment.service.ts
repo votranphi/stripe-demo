@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import stripe from '../config/stripe.js';
 import { OrderLineItem } from '../models/order.model.js';
-import { UserModel } from '../models/user.model.js';
+import { UserService } from './user.service.js';
 import {
   CheckoutSessionException,
   StripeRefundException,
@@ -11,9 +11,11 @@ import {
 
 export class PaymentService {
   private readonly stripe: Stripe;
+  private readonly userService: UserService;
 
-  constructor() {
+  constructor(userService?: UserService) {
     this.stripe = stripe;
+    this.userService = userService || new UserService();
   }
 
   // Creates a Stripe checkout session for the given order
@@ -97,7 +99,7 @@ export class PaymentService {
   async getOrCreateCustomer(userId: string, email: string): Promise<string> {
     try {
       // Check if user already has a Stripe customer ID
-      const user = await UserModel.findOne({ id: userId });
+      const user = await this.userService.findById(userId);
       if (!user) {
         throw new DatabaseException('User not found');
       }
@@ -115,10 +117,7 @@ export class PaymentService {
       });
 
       // Save customer ID to user document
-      await UserModel.findOneAndUpdate(
-        { id: userId },
-        { $set: { stripeCustomerId: customer.id } }
-      );
+      await this.userService.updateStripeCustomerId(userId, customer.id);
 
       return customer.id;
     } catch (error) {
