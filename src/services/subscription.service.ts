@@ -169,4 +169,22 @@ export class SubscriptionService {
       );
     }
   }
+
+  // Retrieve checkout session details from Stripe
+  async retrieveCheckoutSession(sessionId: string): Promise<{ session: any }> {
+    try {
+      const session = await this.paymentService.retrieveCheckoutSession(sessionId);
+
+      return {
+        session: session
+      };
+    } catch (error) {
+      if (error instanceof CheckoutSessionException) {
+        throw error;
+      }
+      throw new CheckoutSessionException(
+        error instanceof Error ? error.message : 'Failed to retrieve session'
+      );
+    }
+  }
 }

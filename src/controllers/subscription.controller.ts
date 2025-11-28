@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { SubscriptionService } from '../services/subscription.service.js';
 import { CreateSubscriptionCheckoutDTO, CreateBillingPortalSessionDTO } from '../dtos/subscription.dto.js';
 import { ErrorMiddleware } from '../middlewares/error.middleware.js';
-import { UnauthorizedException } from '../errors/CustomError.js';
+import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
 
 export class SubscriptionController {
   private subscriptionService: SubscriptionService | null = null;
@@ -95,6 +95,39 @@ export class SubscriptionController {
     res.status(200).json({
       success: true,
       message: 'Subscription cancellation initiated. The subscription status will be updated shortly.'
+    });
+  });
+
+  // GET /api/v1/subscriptions/checkout/success?session_id=xxx
+  checkoutSuccess = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const sessionId = req.query.session_id as string;
+
+    if (!sessionId) {
+      throw new MissingSessionIdException();
+    }
+
+    // Retrieve session info (DO NOT update status here - only webhook should do that)
+    const { session } = await this.getSubscriptionService().retrieveCheckoutSession(sessionId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Subscription checkout successful! Your subscription is being processed.',
+      data: {
+        subscriptionId: session.subscription,
+        paymentStatus: session.payment_status,
+        customerEmail: session.customer_details?.email
+      }
+    });
+  });
+
+  // GET /api/v1/subscriptions/checkout/cancel
+  checkoutCancel = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    res.status(200).json({
+      success: true,
+      message: 'Subscription checkout was canceled. You can retry anytime.',
+      data: {
+        redirectUrl: '/subscription-plans'
+      }
     });
   });
 }
