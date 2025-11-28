@@ -35,9 +35,9 @@ export class CronService {
 
         for (const event of failedEvents) {
           try {
-            await this.verifyAndUpdateOrder(event.sessionId, event.orderId!);
+            await this.verifyAndUpdateOrder(event.stripeId, event.orderId!);
           } catch (error) {
-            console.error(`Failed to verify order for session ${event.sessionId}:`, error);
+            console.error(`Failed to verify order for Stripe resource ${event.stripeId}:`, error);
           }
         }
       }
@@ -49,10 +49,10 @@ export class CronService {
     }
   }
 
-  private async verifyAndUpdateOrder(sessionId: string, orderId: string): Promise<void> {
+  private async verifyAndUpdateOrder(stripeId: string, orderId: string): Promise<void> {
     try {
       // Retrieve the checkout session from Stripe via OrderService
-      const { session } = await this.orderService.retrieveCheckoutSession(sessionId);
+      const { session } = await this.orderService.retrieveCheckoutSession(stripeId);
 
       // Check if payment was actually completed
       if (session.payment_status === 'paid') {
@@ -71,7 +71,7 @@ export class CronService {
 
           // Update webhook event status to success
           await WebhookEventModel.findOneAndUpdate(
-            { sessionId },
+            { stripeId },
             { 
               status: 'success',
               errorMessage: 'Recovered by cron job'
@@ -79,10 +79,10 @@ export class CronService {
           );
         }
       } else {
-        console.log(`Session ${sessionId} payment status is ${session.payment_status}, no action needed`);
+        console.log(`Stripe resource ${stripeId} payment status is ${session.payment_status}, no action needed`);
       }
     } catch (error) {
-      console.error(`Error verifying session ${sessionId}:`, error);
+      console.error(`Error verifying Stripe resource ${stripeId}:`, error);
       throw error;
     }
   }
