@@ -12,3 +12,16 @@ export class CreateSubscriptionCheckoutDTO {
     this.planId = parsed.planId;
   }
 }
+
+export class CreateBillingPortalSessionDTO {
+  static schema = z.object({
+    returnUrl: z.url('Invalid return URL format'),
+  });
+
+  returnUrl: string;
+
+  constructor(data: unknown) {
+    const parsed = CreateBillingPortalSessionDTO.schema.parse(data);
+    this.returnUrl = parsed.returnUrl;
+  }
+}

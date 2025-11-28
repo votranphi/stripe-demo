@@ -6,7 +6,9 @@ import {
   CheckoutSessionException,
   StripeRefundException,
   WebhookSignatureException,
-  DatabaseException
+  DatabaseException,
+  BillingPortalException,
+  SubscriptionCancellationException
 } from '../errors/CustomError.js';
 
 export class PaymentService {
@@ -186,5 +188,36 @@ export class PaymentService {
       },
       quantity: item.quantity
     }));
+  }
+
+  // Creates a Stripe Billing Portal session for customer self-service
+  async createBillingPortalSession(
+    customerId: string,
+    returnUrl: string
+  ): Promise<{ url: string }> {
+    try {
+      const session = await this.stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl
+      });
+
+      return { url: session.url };
+    } catch (error) {
+      throw new BillingPortalException(
+        error instanceof Error ? error.message : 'Failed to create billing portal session'
+      );
+    }
+  }
+
+  // Cancels a Stripe subscription
+  async cancelSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
+    try {
+      const canceledSubscription = await this.stripe.subscriptions.cancel(stripeSubscriptionId);
+      return canceledSubscription;
+    } catch (error) {
+      throw new SubscriptionCancellationException(
+        error instanceof Error ? error.message : 'Failed to cancel subscription'
+      );
+    }
   }
 }

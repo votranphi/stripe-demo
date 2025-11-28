@@ -154,4 +154,31 @@ export class UserSubscriptionService {
       );
     }
   }
+
+  // Find UserSubscription by ID
+  async findById(subscriptionId: string) {
+    try {
+      return await UserSubscriptionModel.findOne({ id: subscriptionId }).exec();
+    } catch (error) {
+      throw new DatabaseException(
+        'find user subscription by ID',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  // Get active subscription for a user with details
+  async getActiveSubscriptionByUserId(userId: string) {
+    try {
+      return await UserSubscriptionModel.findOne({
+        userId,
+        status: UserSubscriptionStatus.ACTIVE
+      }).exec();
+    } catch (error) {
+      throw new DatabaseException(
+        'get active user subscription',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
 }

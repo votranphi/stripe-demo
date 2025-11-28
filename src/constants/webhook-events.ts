@@ -1,7 +1,3 @@
-/**
- * Stripe Webhook Event Types
- * Centralized constants for all webhook events handled in the application
- */
 export const WebhookEvents = {
   // Checkout Session Events
   CHECKOUT_SESSION_COMPLETED: 'checkout.session.completed',
