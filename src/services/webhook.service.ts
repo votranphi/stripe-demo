@@ -5,6 +5,7 @@ import { WebhookEventModel } from '../models/webhook-event.model.js';
 import { WebhookSignatureException, DuplicateProcessingException } from '../errors/CustomError.js';
 import { UserSubscriptionModel, UserSubscriptionStatus } from '../models/user-subscription.model.js';
 import { UserModel } from '../models/user.model.js';
+import { WebhookEvents } from '../constants/webhook-events.js';
 import Stripe from 'stripe';
 import Database from '../config/database.js';
 import crypto from 'crypto';
@@ -42,38 +43,38 @@ export class WebhookService {
 
     // Handle specific events
     switch (event.type) {
-      case 'checkout.session.completed':
+      case WebhookEvents.CHECKOUT_SESSION_COMPLETED:
         // Save only handled event to DB
         await this.saveWebhookEvent(event);
         await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
         break;
 
-      case 'checkout.session.expired':
+      case WebhookEvents.CHECKOUT_SESSION_EXPIRED:
         await this.saveWebhookEvent(event);
         await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
         break;
 
-      case 'charge.refunded':
+      case WebhookEvents.CHARGE_REFUNDED:
         await this.saveWebhookEvent(event);
         await this.handleChargeRefunded(event.data.object as Stripe.Charge);
         break;
 
-      case 'customer.subscription.created':
+      case WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED:
         await this.saveWebhookEvent(event);
         await this.handleSubscriptionCreated(event.data.object as Stripe.Subscription);
         break;
 
-      case 'customer.subscription.deleted':
+      case WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED:
         await this.saveWebhookEvent(event);
         await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
         break;
 
-      case 'invoice.payment_succeeded':
+      case WebhookEvents.INVOICE_PAYMENT_SUCCEEDED:
         await this.saveWebhookEvent(event);
         await this.handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
         break;
 
-      case 'invoice.payment_failed':
+      case WebhookEvents.INVOICE_PAYMENT_FAILED:
         await this.saveWebhookEvent(event);
         await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
         break;
@@ -92,20 +93,20 @@ export class WebhookService {
 
     if (!orderId && session.mode === 'payment') {
       console.error('Order ID not found in session metadata');
-      await this.logWebhookEvent(session.id, 'checkout.session.completed', undefined, 'failed', 'Order ID not found in session metadata');
+      await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, undefined, 'failed', 'Order ID not found in session metadata');
       return;
     }
 
     if (!userId) {
       console.error('User ID not found in session metadata');
-      await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'failed', 'User ID not found in session metadata');
+      await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, orderId, 'failed', 'User ID not found in session metadata');
       return;
     }
 
     // Verify payment status before starting transaction
     if (session.payment_status !== 'paid') {
       console.log(`Payment not completed for session ${session.id}`);
-      await this.logWebhookEvent(session.id, 'checkout.session.completed', orderId, 'failed', 'Payment not completed');
+      await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, orderId, 'failed', 'Payment not completed');
       return;
     }
 
@@ -178,7 +179,7 @@ export class WebhookService {
             status: 'success',
             processedAt: new Date(),
             orderId: orderId,
-            eventType: 'checkout.session.completed',
+            eventType: WebhookEvents.CHECKOUT_SESSION_COMPLETED,
             errorMessage: undefined
           },
           {
@@ -198,7 +199,7 @@ export class WebhookService {
           status: 'failed',
           processedAt: new Date(),
           orderId: orderId,
-          eventType: 'checkout.session.completed',
+          eventType: WebhookEvents.CHECKOUT_SESSION_COMPLETED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         },
         { upsert: true } // Create a new one if it's never existed
@@ -233,7 +234,7 @@ export class WebhookService {
 
         // Update webhook event status
         await WebhookEventModel.findOneAndUpdate(
-          { stripeId: session.id, eventType: 'checkout.session.expired' },
+          { stripeId: session.id, eventType: WebhookEvents.CHECKOUT_SESSION_EXPIRED },
           { status: 'success' }
         );
       }
@@ -242,7 +243,7 @@ export class WebhookService {
 
       // Update webhook event status to failed
       await WebhookEventModel.findOneAndUpdate(
-        { stripeId: session.id, eventType: 'checkout.session.expired' },
+        { stripeId: session.id, eventType: WebhookEvents.CHECKOUT_SESSION_EXPIRED },
         {
           status: 'failed',
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
@@ -257,7 +258,7 @@ export class WebhookService {
 
     if (!paymentIntentId) {
       console.error('Payment intent ID not found in charge.refunded event');
-      await this.logWebhookEvent(charge.id, 'charge.refunded', undefined, 'failed', 'Payment intent ID not found');
+      await this.logWebhookEvent(charge.id, WebhookEvents.CHARGE_REFUNDED, undefined, 'failed', 'Payment intent ID not found');
       return;
     }
 
@@ -317,7 +318,7 @@ export class WebhookService {
             status: 'success',
             processedAt: new Date(),
             orderId: order.id,
-            eventType: 'charge.refunded',
+            eventType: WebhookEvents.CHARGE_REFUNDED,
             errorMessage: undefined
           },
           {
@@ -336,7 +337,7 @@ export class WebhookService {
         {
           status: 'failed',
           processedAt: new Date(),
-          eventType: 'charge.refunded',
+          eventType: WebhookEvents.CHARGE_REFUNDED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         },
         { upsert: true }
@@ -353,7 +354,7 @@ export class WebhookService {
 
     if (!stripeCustomerId) {
       console.error('Customer ID not found in subscription.created event');
-      await this.logWebhookEvent(subscription.id, 'customer.subscription.created', undefined, 'failed', 'Customer ID not found');
+      await this.logWebhookEvent(subscription.id, WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED, undefined, 'failed', 'Customer ID not found');
       return;
     }
 
@@ -422,7 +423,7 @@ export class WebhookService {
           {
             status: 'success',
             processedAt: new Date(),
-            eventType: 'customer.subscription.created',
+            eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED,
             errorMessage: undefined
           },
           {
@@ -441,7 +442,7 @@ export class WebhookService {
         {
           status: 'failed',
           processedAt: new Date(),
-          eventType: 'customer.subscription.created',
+          eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         },
         { upsert: true }
@@ -460,7 +461,7 @@ export class WebhookService {
     try {
       await dbSession.withTransaction(async () => {
         // Check Idempotency
-        const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id, eventType: 'customer.subscription.deleted' }).session(dbSession);
+        const existingEvent = await WebhookEventModel.findOne({ stripeId: subscription.id, eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED }).session(dbSession);
 
         if (existingEvent && existingEvent.status === 'success') {
           console.log(`Subscription deletion ${subscription.id} already processed successfully at ${existingEvent.processedAt}, skipping...`);
@@ -487,7 +488,7 @@ export class WebhookService {
 
         // Update webhook event to success
         await WebhookEventModel.findOneAndUpdate(
-          { stripeId: subscription.id, eventType: 'customer.subscription.deleted' },
+          { stripeId: subscription.id, eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED },
           {
             status: 'success',
             processedAt: new Date(),
@@ -505,7 +506,7 @@ export class WebhookService {
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
-        { stripeId: subscription.id, eventType: 'customer.subscription.deleted' },
+        { stripeId: subscription.id, eventType: WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED },
         {
           status: 'failed',
           processedAt: new Date(),
@@ -525,7 +526,7 @@ export class WebhookService {
 
     if (!subscriptionId) {
       console.error('Subscription ID not found in invoice.payment_succeeded event');
-      await this.logWebhookEvent(invoice.id, 'invoice.payment_succeeded', undefined, 'failed', 'Subscription ID not found');
+      await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_SUCCEEDED, undefined, 'failed', 'Subscription ID not found');
       return;
     }
 
@@ -571,7 +572,7 @@ export class WebhookService {
           {
             status: 'success',
             processedAt: new Date(),
-            eventType: 'invoice.payment_succeeded',
+            eventType: WebhookEvents.INVOICE_PAYMENT_SUCCEEDED,
             errorMessage: undefined
           },
           {
@@ -590,7 +591,7 @@ export class WebhookService {
         {
           status: 'failed',
           processedAt: new Date(),
-          eventType: 'invoice.payment_succeeded',
+          eventType: WebhookEvents.INVOICE_PAYMENT_SUCCEEDED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         },
         { upsert: true }
@@ -607,7 +608,7 @@ export class WebhookService {
 
     if (!subscriptionId) {
       console.error('Subscription ID not found in invoice.payment_failed event');
-      await this.logWebhookEvent(invoice.id, 'invoice.payment_failed', undefined, 'failed', 'Subscription ID not found');
+      await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_FAILED, undefined, 'failed', 'Subscription ID not found');
       return;
     }
 
@@ -648,7 +649,7 @@ export class WebhookService {
           {
             status: 'success',
             processedAt: new Date(),
-            eventType: 'invoice.payment_failed',
+            eventType: WebhookEvents.INVOICE_PAYMENT_FAILED,
             errorMessage: undefined
           },
           {
@@ -667,7 +668,7 @@ export class WebhookService {
         {
           status: 'failed',
           processedAt: new Date(),
-          eventType: 'invoice.payment_failed',
+          eventType: WebhookEvents.INVOICE_PAYMENT_FAILED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         },
         { upsert: true }
