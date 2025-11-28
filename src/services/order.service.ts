@@ -1,9 +1,9 @@
 import Database from '../config/database.js';
 import { Order, OrderModel, OrderStatus, OrderLineItem } from '../models/order.model.js';
-import { UserModel } from '../models/user.model.js';
+import { UserService } from './user.service.js';
 import { ProductService } from './product.service.js';
 import { PaymentService } from './payment.service.js';
-import { ProductModel } from '../models/product.model.js';
+import { ProductType } from '../models/product.model.js';
 import mongoose from 'mongoose';
 import {
   ProductNotFoundException,
@@ -12,25 +12,29 @@ import {
   DraftOrderNotFoundException,
   ItemNotInDraftException,
   EmptyDraftException,
+  InvalidProductTypeException,
   DatabaseException,
   CheckoutSessionException,
 } from '../errors/CustomError.js';
 
 export class OrderService {
+  private readonly userService: UserService;
   private readonly productService: ProductService;
   private readonly paymentService: PaymentService;
 
   constructor(
+    userService?: UserService,
     productService?: ProductService,
     paymentService?: PaymentService
   ) {
+    this.userService = userService || new UserService();
     this.productService = productService || new ProductService();
     this.paymentService = paymentService || new PaymentService();
   }
 
   async getUserDraft(userId: string): Promise<Order> {
     try {
-      const user = await UserModel.findOne({ id: userId });
+      const user = await this.userService.findById(userId);
       if (!user) {
         throw new DraftOrderNotFoundException(userId);
       }
@@ -73,6 +77,11 @@ export class OrderService {
       const product = await this.productService.getProductById(productId);
       if (!product) {
         throw new ProductNotFoundException(productId);
+      }
+
+      // Block subscription products from being added to cart
+      if (product.type === ProductType.SUBSCRIPTION) {
+        throw new InvalidProductTypeException();
       }
 
       // Calculate total quantity including existing draft items
@@ -138,7 +147,8 @@ export class OrderService {
       if (
         error instanceof DraftOrderNotFoundException ||
         error instanceof ProductNotFoundException ||
-        error instanceof InsufficientStockException
+        error instanceof InsufficientStockException ||
+        error instanceof InvalidProductTypeException
       ) {
         throw error;
       }
@@ -286,6 +296,9 @@ export class OrderService {
           throw new EmptyDraftException();
         }
 
+        // Verify no subscription products in cart
+        await this.validateNoSubscriptionProducts(draft.lineItems);
+
         // Validate all products still exist and have sufficient stock
         await this.validateDraftStock(draft.lineItems);
 
@@ -334,6 +347,7 @@ export class OrderService {
         error instanceof DraftOrderNotFoundException ||
         error instanceof ProductNotFoundException ||
         error instanceof InsufficientStockException ||
+        error instanceof InvalidProductTypeException ||
         error instanceof CheckoutSessionException
       ) {
         throw error;
@@ -358,10 +372,7 @@ export class OrderService {
       await draftOrder.save();
 
       // Update user's draftOrderId reference
-      await UserModel.findOneAndUpdate(
-        { id: userId },
-        { $set: { draftOrderId: draftOrder.id } }
-      );
+      await this.userService.updateDraftOrderId(userId, draftOrder.id);
 
       return {
         id: draftOrder.id,
@@ -621,6 +632,18 @@ export class OrderService {
 
   // Private helper methods
 
+  private async validateNoSubscriptionProducts(lineItems: OrderLineItem[]): Promise<void> {
+    for (const item of lineItems) {
+      const product = await this.productService.getProductById(item.productId);
+      if (!product) {
+        throw new ProductNotFoundException(item.productId);
+      }
+      if (product.type === ProductType.SUBSCRIPTION) {
+        throw new InvalidProductTypeException();
+      }
+    }
+  }
+
   private async validateDraftStock(lineItems: OrderLineItem[]): Promise<void> {
     for (const item of lineItems) {
       const product = await this.productService.getProductById(item.productId);
@@ -646,15 +669,13 @@ export class OrderService {
 
   private async incrementProductStock(lineItems: OrderLineItem[], session?: mongoose.ClientSession): Promise<void> {
     for (const item of lineItems) {
-      // Use direct MongoDB query with session instead of ProductService to ensure the operation is part of the transaction
-      const product = await ProductModel.findOne({ id: item.productId }).session(session || null);
+      // Get product to verify it exists
+      const product = await this.productService.getProductById(item.productId);
       if (product) {
-        // Add back the quantity to stock using atomic increment
-        await ProductModel.findOneAndUpdate(
-          { id: item.productId },
-          { $inc: { stock: item.quantity } },
-          { session: session || undefined }
-        );
+        // Add back the quantity to stock
+        await this.productService.updateProduct(item.productId, {
+          stock: product.stock + item.quantity
+        });
       }
     }
   }

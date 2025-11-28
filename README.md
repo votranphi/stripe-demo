@@ -89,7 +89,16 @@ npm run build
 
 ## Usage
 
-### 1. Register & Login
+> **Note:** Most endpoints require authentication. Include the JWT token in the `Authorization` header as `Bearer <token>`.
+
+---
+
+### 1. Authentication (`/api/v1/auth`)
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/auth/register` | ❌ | Register a new account |
+| POST | `/api/v1/auth/login` | ❌ | Login to an existing account |
 
 - **Register an account**
     - `POST /api/v1/auth/register`
@@ -97,9 +106,11 @@ npm run build
         ```json
         {
             "email": "user@example.com",
-            "password": "yourpassword"
+            "password": "yourpassword",
+            "role": "USER"
         }
         ```
+    - `role` is optional, defaults to `USER`. Can be `USER` or `ADMIN`.
     - Returns: User info and token.
 
 - **Login**
@@ -115,100 +126,233 @@ npm run build
 
 ---
 
-### 2. Product Management
+### 2. Products (`/api/v1/products`)
 
-- **Create product** (Admin required)
+| Method | Endpoint | Auth | Admin | Description |
+|--------|----------|------|-------|-------------|
+| POST | `/api/v1/products` | ✅ | ✅ | Create a new product |
+| GET | `/api/v1/products` | ✅ | ❌ | Get all products |
+| GET | `/api/v1/products/:id` | ✅ | ❌ | Get product by ID |
+| PUT | `/api/v1/products/:id` | ✅ | ✅ | Update a product |
+| DELETE | `/api/v1/products/:id` | ✅ | ✅ | Delete a product |
+
+- **Create a product** (Admin only)
     - `POST /api/v1/products`
     - Body:
         ```json
         {
-            "name": "Shorts",
-            "price": 100,
-            "stock": 10000
+            "name": "Product Name",
+            "price": 29.99,
+            "stock": 100,
+            "type": "ONE_TIME"
         }
         ```
+    - `type` can be `ONE_TIME` or `RECURRING`.
 
 - **Get all products**
     - `GET /api/v1/products`
+    - Returns: List of all products.
 
-- **Get product details**
+- **Get product by ID**
     - `GET /api/v1/products/:id`
+    - Returns: Product details.
 
-- **Update product** (Admin required)
+- **Update a product** (Admin only)
     - `PUT /api/v1/products/:id`
+    - Body: Same as create product.
 
-- **Delete product** (Admin required)
+- **Delete a product** (Admin only)
     - `DELETE /api/v1/products/:id`
 
 ---
 
-### 3. Cart Management (Draft Order)
+### 3. Orders / Cart (`/api/v1/orders`)
 
-- **View current cart**
+#### Cart/Draft Management
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/v1/orders/draft` | ✅ | Get current draft/cart |
+| POST | `/api/v1/orders/draft/items` | ✅ | Add item to cart |
+| PATCH | `/api/v1/orders/draft/items/:productId` | ✅ | Update item quantity |
+| DELETE | `/api/v1/orders/draft/items/:productId` | ✅ | Remove item from cart |
+
+- **Get current draft/cart**
     - `GET /api/v1/orders/draft`
+    - Returns: Current draft order with items.
 
-- **Add product to cart**
+- **Add item to cart**
     - `POST /api/v1/orders/draft/items`
     - Body:
         ```json
         {
-            "productId": "product_id",
+            "productId": "uuid-of-product",
             "quantity": 2
         }
         ```
 
-- **Remove product from cart**
-    - `DELETE /api/v1/orders/draft/items/:productId`
-
-- **Update product quantity in cart**
+- **Update item quantity**
     - `PATCH /api/v1/orders/draft/items/:productId`
     - Body:
         ```json
         {
-            "quantity": 3
+            "quantity": 5
         }
         ```
 
----
+- **Remove item from cart**
+    - `DELETE /api/v1/orders/draft/items/:productId`
 
-### 4. Stripe Checkout Payment
+#### Checkout
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/orders/checkout/create-session` | ✅ | Create Stripe checkout session |
+| GET | `/api/v1/orders/checkout/success` | ❌ | Checkout success callback |
+| GET | `/api/v1/orders/checkout/cancel` | ❌ | Checkout cancel callback |
 
 - **Create checkout session**
     - `POST /api/v1/orders/checkout/create-session`
-    - Returns: `checkoutUrl` for redirecting to Stripe.
+    - Creates a Stripe Checkout session for the current draft order.
+    - Returns: Stripe checkout URL.
 
-- **Successful payment result**
-    - `GET /api/v1/orders/checkout/success?session_id=...`
+- **Checkout success**
+    - `GET /api/v1/orders/checkout/success`
+    - Stripe redirects here after successful payment.
 
-- **Cancel payment**
+- **Checkout cancel**
     - `GET /api/v1/orders/checkout/cancel`
+    - Stripe redirects here if payment is cancelled.
 
 ---
 
-### 5. Stripe Webhook
+### 4. Subscription Plans (`/api/v1/subscription-plans`)
 
-- **Receive webhook from Stripe**
+| Method | Endpoint | Auth | Admin | Description |
+|--------|----------|------|-------|-------------|
+| POST | `/api/v1/subscription-plans` | ✅ | ✅ | Create a subscription plan |
+| GET | `/api/v1/subscription-plans` | ✅ | ❌ | Get all subscription plans |
+| GET | `/api/v1/subscription-plans/:id` | ✅ | ❌ | Get plan by ID |
+| PUT | `/api/v1/subscription-plans/:id` | ✅ | ✅ | Update a plan |
+| DELETE | `/api/v1/subscription-plans/:id` | ✅ | ✅ | Delete a plan |
+
+- **Create a subscription plan** (Admin only)
+    - `POST /api/v1/subscription-plans`
+    - Body:
+        ```json
+        {
+            "stripePriceId": "price_xxx",
+            "productId": "prod_xxx",
+            "frequency": "MONTHLY",
+            "currency": "usd"
+        }
+        ```
+    - `frequency` can be `MONTHLY` or `YEARLY`.
+
+- **Get all subscription plans**
+    - `GET /api/v1/subscription-plans`
+    - Returns: List of all subscription plans.
+
+- **Get plan by ID**
+    - `GET /api/v1/subscription-plans/:id`
+    - Returns: Subscription plan details.
+
+- **Update a plan** (Admin only)
+    - `PUT /api/v1/subscription-plans/:id`
+    - Body: Same as create plan.
+
+- **Delete a plan** (Admin only)
+    - `DELETE /api/v1/subscription-plans/:id`
+
+---
+
+### 5. Subscriptions (`/api/v1/subscriptions`)
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/subscriptions/checkout/create-session` | ✅ | Create subscription checkout session |
+| GET | `/api/v1/subscriptions/checkout/success` | ❌ | Subscription checkout success callback |
+| GET | `/api/v1/subscriptions/checkout/cancel` | ❌ | Subscription checkout cancel callback |
+| GET | `/api/v1/subscriptions/me` | ✅ | Get my current subscription |
+| POST | `/api/v1/subscriptions/portal-session` | ✅ | Create Stripe billing portal session |
+| DELETE | `/api/v1/subscriptions/:id` | ✅ | Cancel a subscription |
+
+- **Create subscription checkout session**
+    - `POST /api/v1/subscriptions/checkout/create-session`
+    - Body:
+        ```json
+        {
+            "planId": "uuid-of-subscription-plan"
+        }
+        ```
+    - Returns: Stripe checkout URL for subscription.
+
+- **Get my subscription**
+    - `GET /api/v1/subscriptions/me`
+    - Returns: Current user's active subscription.
+
+- **Create billing portal session**
+    - `POST /api/v1/subscriptions/portal-session`
+    - Body:
+        ```json
+        {
+            "returnUrl": "https://your-app.com/dashboard"
+        }
+        ```
+    - Returns: Stripe billing portal URL for managing subscription.
+
+- **Cancel subscription**
+    - `DELETE /api/v1/subscriptions/:id`
+    - Cancels the specified subscription.
+
+---
+
+### 6. Digital Content (`/api/v1/digital-content`)
+
+| Method | Endpoint | Auth | Subscription | Description |
+|--------|----------|------|--------------|-------------|
+| GET | `/api/v1/digital-content` | ✅ | ✅ | Get premium digital content |
+
+- **Get digital content** (Requires active subscription)
+    - `GET /api/v1/digital-content`
+    - Returns: Premium digital content for subscribed users.
+
+---
+
+### 7. Webhook (`/api/v1/webhook`)
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/webhook` | ❌ | Stripe webhook handler |
+
+- **Stripe webhook handler**
     - `POST /api/v1/webhook`
-    - Stripe will send events to this endpoint to update order status.
+    - Handles Stripe webhook events (payment success, subscription updates, etc.).
+    - This endpoint is called by Stripe, not by your frontend.
 
 ---
 
-### 6. Order Management (Admin)
+### 8. Admin Endpoints (`/api/v1/admin`)
 
-- **View all orders**
+> **Note:** All admin endpoints require authentication AND admin role.
+
+#### Admin Orders (`/api/v1/admin/orders`)
+
+| Method | Endpoint | Auth | Admin | Description |
+|--------|----------|------|-------|-------------|
+| GET | `/api/v1/admin/orders` | ✅ | ✅ | Get all orders |
+| PUT | `/api/v1/admin/orders/:id/status` | ✅ | ✅ | Update order status |
+
+- **Get all orders** (Admin only)
     - `GET /api/v1/admin/orders`
+    - Returns: List of all orders in the system.
 
-- **Update order status**
+- **Update order status** (Admin only)
     - `PUT /api/v1/admin/orders/:id/status`
     - Body:
         ```json
         {
-            "status": "PAID"
+            "status": "SHIPPED"
         }
         ```
-
----
-
-**Notes:**  
-- All endpoints (except register/login) require Bearer Token (JWT) in the `Authorization` header.
-- `/admin/*` endpoints require the user to have admin privileges.
+    - Valid statuses: `DRAFT`, `PENDING`, `PAID`, `SHIPPED`, `DELIVERED`, `CANCELLED`

@@ -11,6 +11,7 @@ export interface User {
   password: string;
   role: UserRole;
   draftOrderId?: string;  // Reference to user's current draft order (shopping cart)
+  stripeCustomerId?: string;  // Stripe Customer ID for subscriptions
 }
 
 export interface UserDocument extends Document {
@@ -19,6 +20,7 @@ export interface UserDocument extends Document {
   password: string;
   role: UserRole;
   draftOrderId?: string;
+  stripeCustomerId?: string;
   createdAt?: Date;
 }
 
@@ -27,7 +29,8 @@ const userSchema = new Schema<UserDocument>({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   role: { type: String, enum: Object.values(UserRole), default: UserRole.USER, required: true },
-  draftOrderId: { type: String, required: false }
+  draftOrderId: { type: String, required: false },
+  stripeCustomerId: { type: String, required: false }
 }, {
   timestamps: true
 });

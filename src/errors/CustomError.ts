@@ -10,6 +10,12 @@ export class CustomError extends Error {
 }
 
 // 400 Errors
+export class MissingStripeCustomerException extends CustomError {
+  constructor() {
+    super('User does not have a Stripe customer ID. Please complete a purchase first.', 400);
+  }
+}
+
 export class WebhookSignatureException extends CustomError {
   constructor() {
     super('Webhook signature verification failed', 400);
@@ -19,6 +25,12 @@ export class WebhookSignatureException extends CustomError {
 export class MissingSessionIdException extends CustomError {
   constructor() {
     super('Missing session_id in query parameters', 400);
+  }
+}
+
+export class InvalidProductTypeException extends CustomError {
+  constructor() {
+    super('Subscription products cannot be added to the shopping cart. Please use the subscription checkout flow.', 400);
   }
 }
 
@@ -64,6 +76,18 @@ export class OrderNotFoundException extends CustomError {
 export class DraftOrderNotFoundException extends CustomError {
   constructor(userId: string) {
     super(`Draft order not found for user ${userId}`, 404);
+  }
+}
+
+export class SubscriptionPlanNotFoundException extends CustomError {
+  constructor(planId: string) {
+    super(`Subscription plan with id ${planId} not found`, 404);
+  }
+}
+
+export class UserSubscriptionNotFoundException extends CustomError {
+  constructor(subscriptionId: string) {
+    super(`Subscription with id ${subscriptionId} not found`, 404);
   }
 }
 
@@ -144,5 +168,17 @@ export class ProductUpdateException extends CustomError {
 export class JWTSecretMissingException extends CustomError {
   constructor() {
     super('JWT_SECRET environment variable is not configured', 500);
+  }
+}
+
+export class SubscriptionCancellationException extends CustomError {
+  constructor(message: string) {
+    super(`Subscription cancellation error: ${message}`, 500);
+  }
+}
+
+export class BillingPortalException extends CustomError {
+  constructor(message: string) {
+    super(`Billing portal error: ${message}`, 500);
   }
 }

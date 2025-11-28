@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { OrderService } from '../services/order.service.js';
 import { AddItemDTO, UpdateItemDTO, UpdateOrderStatusDTO } from '../dtos/order.dto.js';
-import { asyncHandler } from '../middlewares/error.middleware.js';
+import { ErrorMiddleware } from '../middlewares/error.middleware.js';
 import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
 import { OrderStatus } from '../models/order.model.js';
 
@@ -17,7 +17,7 @@ export class OrderController {
   }
 
   // GET /api/v1/orders/draft
-  getDraft = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getDraft = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException();
@@ -32,7 +32,7 @@ export class OrderController {
   });
 
   // POST /api/v1/orders/draft/items
-  addItemToDraft = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  addItemToDraft = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException();
@@ -50,7 +50,7 @@ export class OrderController {
   });
 
   // DELETE /api/v1/orders/draft/items/:productId
-  removeItemFromDraft = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  removeItemFromDraft = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException();
@@ -71,7 +71,7 @@ export class OrderController {
   });
 
   // PATCH /api/v1/orders/draft/items/:productId
-  updateItemQuantity = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  updateItemQuantity = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException();
@@ -93,7 +93,7 @@ export class OrderController {
   });
 
   // POST /api/v1/orders/checkout/create-session
-  createCheckoutSession = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  createCheckoutSession = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException();
@@ -112,7 +112,7 @@ export class OrderController {
   });
 
   // GET /api/v1/orders/checkout/success?session_id=xxx
-  checkoutSuccess = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  checkoutSuccess = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const sessionId = req.query.session_id as string;
 
     if (!sessionId) {
@@ -137,7 +137,7 @@ export class OrderController {
   });
 
   // GET /api/v1/orders/checkout/cancel
-  checkoutCancel = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  checkoutCancel = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({
       success: true,
       message: 'Payment was canceled. You can retry the checkout anytime.',
@@ -148,7 +148,7 @@ export class OrderController {
   });
 
   // GET /api/v1/admin/orders
-  getAllOrdersByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getAllOrdersByAdmin = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     // isAdmin middleware should already protect this route
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -167,7 +167,7 @@ export class OrderController {
   });
 
   // PUT /api/v1/admin/orders/:id/status
-  updateOrderStatusByAdmin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  updateOrderStatusByAdmin = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     // isAdmin middleware should already protect this route
     const { id } = req.params;
     if (!id) {

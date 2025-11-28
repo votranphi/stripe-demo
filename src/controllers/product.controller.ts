@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service.js';
 import { CreateUpdateProductDTO } from '../dtos/product.dto.js';
-import { asyncHandler } from '../middlewares/error.middleware.js';
+import { ErrorMiddleware } from '../middlewares/error.middleware.js';
 import { ProductNotFoundException } from '../errors/CustomError.js';
 
 export class ProductController {
@@ -16,7 +16,7 @@ export class ProductController {
   }
 
   // GET /api/v1/products
-  getAllProducts = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getAllProducts = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     
@@ -34,7 +34,7 @@ export class ProductController {
   });
 
   // POST /api/v1/products
-  createProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  createProduct = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const dto = new CreateUpdateProductDTO(req.body);
     const product = await this.getProductService().createProduct(dto);
     res.status(201).json({
@@ -44,7 +44,7 @@ export class ProductController {
   });
 
   // GET /api/v1/products/:id
-  getProductById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getProductById = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     const product = await this.getProductService().getProductById(id);
     if (!product) {
@@ -54,7 +54,7 @@ export class ProductController {
   });
 
   // PUT /api/v1/products/:id
-  updateProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  updateProduct = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     // Validate request body using DTO
     const dto = new CreateUpdateProductDTO(req.body);
@@ -66,7 +66,7 @@ export class ProductController {
   });
 
   // DELETE /api/v1/products/:id
-  deleteProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  deleteProduct = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     const deleted = await this.getProductService().deleteProduct(id);
     if (!deleted) {
