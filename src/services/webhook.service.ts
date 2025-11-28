@@ -708,7 +708,7 @@ export class WebhookService {
 
   private async saveWebhookEvent(event: Stripe.Event): Promise<void> {
     try {
-      const stripeId = (event.data.object as any).id || event.id;
+      const stripeId = (event.data.object as any).id;
       const orderId = (event.data.object as any).metadata?.order_id;
 
       const webhookEvent = new WebhookEventModel({
