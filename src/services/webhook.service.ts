@@ -48,37 +48,37 @@ export class WebhookService {
     switch (event.type) {
       case WebhookEvents.CHECKOUT_SESSION_COMPLETED:
         // Save only handled event to DB
-        await this.saveWebhookEvent(event);
+        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending', (event.data.object as any).metadata?.order_id);
         await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
         break;
 
       case WebhookEvents.CHECKOUT_SESSION_EXPIRED:
-        await this.saveWebhookEvent(event);
+        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending', (event.data.object as any).metadata?.order_id);
         await this.handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session);
         break;
 
       case WebhookEvents.CHARGE_REFUNDED:
-        await this.saveWebhookEvent(event);
+        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending');
         await this.handleChargeRefunded(event.data.object as Stripe.Charge);
         break;
 
       case WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED:
-        await this.saveWebhookEvent(event);
+        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending');
         await this.handleSubscriptionCreated(event.data.object as Stripe.Subscription);
         break;
 
       case WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED:
-        await this.saveWebhookEvent(event);
+        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending');
         await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
         break;
 
       case WebhookEvents.INVOICE_PAYMENT_SUCCEEDED:
-        await this.saveWebhookEvent(event);
+        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending');
         await this.handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
         break;
 
       case WebhookEvents.INVOICE_PAYMENT_FAILED:
-        await this.saveWebhookEvent(event);
+        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending');
         await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
         break;
 
@@ -96,20 +96,20 @@ export class WebhookService {
 
     if (!orderId && session.mode === 'payment') {
       console.error(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Order ID not found in session metadata`);
-      await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, undefined, 'failed', 'Order ID not found in session metadata');
+      await this.upsertWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, 'failed', undefined, 'Order ID not found in session metadata');
       return;
     }
 
     if (!userId) {
       console.error(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] User ID not found in session metadata`);
-      await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, orderId, 'failed', 'User ID not found in session metadata');
+      await this.upsertWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, 'failed', orderId, 'User ID not found in session metadata');
       return;
     }
 
     // Verify payment status before starting transaction
     if (session.payment_status !== 'paid') {
       console.log(`[${WebhookEvents.CHECKOUT_SESSION_COMPLETED}] Payment not completed for session ${session.id}`);
-      await this.logWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, orderId, 'failed', 'Payment not completed');
+      await this.upsertWebhookEvent(session.id, WebhookEvents.CHECKOUT_SESSION_COMPLETED, 'failed', orderId, 'Payment not completed');
       return;
     }
 
@@ -261,7 +261,7 @@ export class WebhookService {
 
     if (!paymentIntentId) {
       console.error(`[${WebhookEvents.CHARGE_REFUNDED}] Payment intent ID not found in event`);
-      await this.logWebhookEvent(charge.id, WebhookEvents.CHARGE_REFUNDED, undefined, 'failed', 'Payment intent ID not found');
+      await this.upsertWebhookEvent(charge.id, WebhookEvents.CHARGE_REFUNDED, 'failed', undefined, 'Payment intent ID not found');
       return;
     }
 
@@ -357,7 +357,7 @@ export class WebhookService {
 
     if (!stripeCustomerId) {
       console.error(`[${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}] Customer ID not found in subscription.created event`);
-      await this.logWebhookEvent(subscription.id, WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED, undefined, 'failed', 'Customer ID not found');
+      await this.upsertWebhookEvent(subscription.id, WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED, 'failed', undefined, 'Customer ID not found');
       return;
     }
 
@@ -524,7 +524,7 @@ export class WebhookService {
 
     if (!subscriptionId) {
       console.error(`[${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}] Subscription ID not found in event`);
-      await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_SUCCEEDED, undefined, 'failed', 'Subscription ID not found');
+      await this.upsertWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_SUCCEEDED, 'failed', undefined, 'Subscription ID not found');
       return;
     }
 
@@ -616,7 +616,7 @@ export class WebhookService {
 
     if (!subscriptionId) {
       console.error(`[${WebhookEvents.INVOICE_PAYMENT_FAILED}] Subscription ID not found in event`);
-      await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_FAILED, undefined, 'failed', 'Subscription ID not found');
+      await this.upsertWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_FAILED, 'failed', undefined, 'Subscription ID not found');
       return;
     }
 
@@ -693,49 +693,30 @@ export class WebhookService {
 
   // Helper functions
 
-  private async logWebhookEvent(
+  private async upsertWebhookEvent(
     stripeId: string,
     eventType: string,
-    orderId: string | undefined,
-    status: 'success' | 'failed',
+    status: 'pending' | 'success' | 'failed',
+    orderId?: string,
     errorMessage?: string
   ): Promise<void> {
     try {
-      const webhookEvent = new WebhookEventModel({
-        stripeId,
-        eventType,
-        orderId,
-        processedAt: new Date(),
-        status,
-        errorMessage
-      });
-
-      await webhookEvent.save();
+      await WebhookEventModel.findOneAndUpdate(
+        { stripeId, eventType },
+        {
+          stripeId,
+          eventType,
+          orderId,
+          processedAt: new Date(),
+          status,
+          errorMessage
+        },
+        { upsert: true }
+      );
+      console.log(`[${eventType}] Webhook event saved for Stripe resource ${stripeId} with status ${status}`);
     } catch (error) {
-      console.error('Failed to log webhook event:', error);
+      console.error('Failed to upsert webhook event:', error);
       // Don't throw error here to avoid blocking the webhook processing
-    }
-  }
-
-  private async saveWebhookEvent(event: Stripe.Event): Promise<void> {
-    try {
-      const stripeId = (event.data.object as any).id;
-      const orderId = (event.data.object as any).metadata?.order_id;
-
-      const webhookEvent = new WebhookEventModel({
-        stripeId,
-        eventType: event.type,
-        orderId,
-        processedAt: new Date(),
-        status: 'pending',
-        errorMessage: undefined
-      });
-
-      await webhookEvent.save();
-      console.log(`[${event.type}] Webhook event saved for Stripe resource ${stripeId}`);
-    } catch (error) {
-      console.error('Failed to save webhook event:', error);
-      // Don't throw to avoid blocking webhook processing
     }
   }
 }
