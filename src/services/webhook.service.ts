@@ -190,7 +190,7 @@ export class WebhookService {
         console.log(`Webhook event updated to success for session ${session.id}`);
       });
     } catch (error) {
-      console.error('Error handling checkout.session.completed:', error);
+      console.error(`Error handling ${WebhookEvents.CHECKOUT_SESSION_COMPLETED}:`, error);
 
       // Update webhook event to failed (rather than create a new one)
       await WebhookEventModel.findOneAndUpdate(
@@ -239,7 +239,7 @@ export class WebhookService {
         );
       }
     } catch (error) {
-      console.error('Error handling checkout.session.expired:', error);
+      console.error(`Error handling ${WebhookEvents.CHECKOUT_SESSION_EXPIRED}:`, error);
 
       // Update webhook event status to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -257,7 +257,7 @@ export class WebhookService {
     const paymentIntentId = charge.payment_intent as string;
 
     if (!paymentIntentId) {
-      console.error('Payment intent ID not found in charge.refunded event');
+      console.error(`Payment intent ID not found in ${WebhookEvents.CHARGE_REFUNDED} event`);
       await this.logWebhookEvent(charge.id, WebhookEvents.CHARGE_REFUNDED, undefined, 'failed', 'Payment intent ID not found');
       return;
     }
@@ -329,7 +329,7 @@ export class WebhookService {
         console.log(`Webhook event updated to success for charge ${charge.id}`);
       });
     } catch (error) {
-      console.error('Error handling charge.refunded:', error);
+      console.error(`Error handling ${WebhookEvents.CHARGE_REFUNDED}:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -434,7 +434,7 @@ export class WebhookService {
         console.log(`Webhook event updated to success for subscription ${subscription.id}`);
       });
     } catch (error) {
-      console.error('Error handling customer.subscription.created:', error);
+      console.error(`Error handling ${WebhookEvents.CUSTOMER_SUBSCRIPTION_CREATED}:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -502,7 +502,7 @@ export class WebhookService {
         console.log(`Webhook event updated to success for subscription deletion ${subscription.id}`);
       });
     } catch (error) {
-      console.error('Error handling customer.subscription.deleted:', error);
+      console.error(`Error handling ${WebhookEvents.CUSTOMER_SUBSCRIPTION_DELETED}:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -525,7 +525,7 @@ export class WebhookService {
     const subscriptionId = invoice.parent?.subscription_details?.subscription;
 
     if (!subscriptionId) {
-      console.error('Subscription ID not found in invoice.payment_succeeded event');
+      console.error(`Subscription ID not found in ${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED} event`);
       await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_SUCCEEDED, undefined, 'failed', 'Subscription ID not found');
       return;
     }
@@ -583,7 +583,7 @@ export class WebhookService {
         console.log(`Webhook event updated to success for invoice ${invoice.id}`);
       });
     } catch (error) {
-      console.error('Error handling invoice.payment_succeeded:', error);
+      console.error(`Error handling ${WebhookEvents.INVOICE_PAYMENT_SUCCEEDED}:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
@@ -607,7 +607,7 @@ export class WebhookService {
     const subscriptionId = invoice.parent?.subscription_details?.subscription;
 
     if (!subscriptionId) {
-      console.error('Subscription ID not found in invoice.payment_failed event');
+      console.error(`Subscription ID not found in ${WebhookEvents.INVOICE_PAYMENT_FAILED} event`);
       await this.logWebhookEvent(invoice.id, WebhookEvents.INVOICE_PAYMENT_FAILED, undefined, 'failed', 'Subscription ID not found');
       return;
     }
@@ -660,7 +660,7 @@ export class WebhookService {
         console.log(`Webhook event updated to success for invoice ${invoice.id}`);
       });
     } catch (error) {
-      console.error('Error handling invoice.payment_failed:', error);
+      console.error(`Error handling ${WebhookEvents.INVOICE_PAYMENT_FAILED}:`, error);
 
       // Update webhook event to failed
       await WebhookEventModel.findOneAndUpdate(
