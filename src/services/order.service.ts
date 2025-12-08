@@ -318,8 +318,8 @@ export class OrderService {
 
         orderId = result.id;
 
-        const successUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
-        const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/cancel`;
+        const successUrl = `${process.env.FRONTEND_BASE_URL}/api/${version}/success?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl = `${process.env.FRONTEND_BASE_URL}/api/${version}/cancel`;
 
         // Create Stripe Checkout Session via PaymentService
         const { sessionId, url } = await this.paymentService.createCheckoutSession(

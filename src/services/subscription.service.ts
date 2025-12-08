@@ -50,8 +50,8 @@ export class SubscriptionService {
       const customerId = await this.paymentService.getOrCreateCustomer(userId, user.email);
 
       // Create success and cancel URLs
-      const successUrl = `${process.env.BASE_URL}/api/v1/subscriptions/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${process.env.BASE_URL}/api/v1/subscriptions/checkout/cancel`;
+      const successUrl = `${process.env.FRONTEND_BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${process.env.FRONTEND_BASE_URL}/cancel`;
 
       // Create subscription checkout session
       const { sessionId, url } = await this.paymentService.createSubscriptionCheckoutSession(
