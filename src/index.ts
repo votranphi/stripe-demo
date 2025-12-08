@@ -1,5 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import Database from './config/database.js';
 import apiRoutes from './routes/index.js';
 import { ErrorMiddleware } from './middlewares/error.middleware.js';
@@ -10,6 +11,8 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT;
 const errorMiddleware = new ErrorMiddleware();
+
+app.use(cors());
 
 // Webhook endpoint needs raw body for signature verification
 app.use('/api/v1/webhook', express.raw({ type: 'application/json' }));
