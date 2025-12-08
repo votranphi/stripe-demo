@@ -1,0 +1,29 @@
+services:
+  app:
+    container_name: stripe-demo-app
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - stripe-net
+
+  stripe-cli:
+    container_name: stripe-cli
+    image: stripe/stripe-cli:latest
+    # Lệnh listen forward webhook về service 'app' port 3000
+    command: listen --forward-to http://app:3000/api/v1/webhook --api-key ${STRIPE_SECRET_KEY}
+    env_file:
+      - .env
+    depends_on:
+      - app
+    networks:
+      - stripe-net
+
+networks:
+  stripe-net:
+    driver: bridge
