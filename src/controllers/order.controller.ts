@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { OrderService } from '../services/order.service.js';
 import { AddItemDTO, UpdateItemDTO, UpdateOrderStatusDTO } from '../dtos/order.dto.js';
 import { ErrorMiddleware } from '../middlewares/error.middleware.js';
-import { MissingSessionIdException, UnauthorizedException } from '../errors/CustomError.js';
+import { UnauthorizedException } from '../errors/CustomError.js';
 import { OrderStatus } from '../models/order.model.js';
 
 export class OrderController {
@@ -107,42 +107,6 @@ export class OrderController {
       data: {
         orderId: orderId,
         checkoutUrl: checkoutUrl
-      }
-    });
-  });
-
-  // GET /api/v1/orders/checkout/success?session_id=xxx
-  checkoutSuccess = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const sessionId = req.query.session_id as string;
-
-    if (!sessionId) {
-      throw new MissingSessionIdException();
-    }
-
-    // Retrieve session and order info
-    const { orderId, session } = await this.getOrderService().retrieveCheckoutSession(sessionId);
-
-    // Get order info (DO NOT update status here - only webhook should do that)
-    const order = await this.getOrderService().getOrderById(orderId);
-
-    res.status(200).json({
-      success: true,
-      message: 'Payment successful! Your order is being processed.',
-      data: {
-        orderId: orderId,
-        paymentStatus: session.payment_status,
-        order: order
-      }
-    });
-  });
-
-  // GET /api/v1/orders/checkout/cancel
-  checkoutCancel = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    res.status(200).json({
-      success: true,
-      message: 'Payment was canceled. You can retry the checkout anytime.',
-      data: {
-        redirectUrl: '/products'
       }
     });
   });

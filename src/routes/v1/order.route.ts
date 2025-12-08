@@ -15,7 +15,5 @@ router.patch('/draft/items/:productId', authMiddleware.authenticate, orderContro
 
 // Checkout endpoints
 router.post('/checkout/create-session', authMiddleware.authenticate, orderController.createCheckoutSession);
-router.get('/checkout/success', orderController.checkoutSuccess);
-router.get('/checkout/cancel', orderController.checkoutCancel);
 
 export default router;
