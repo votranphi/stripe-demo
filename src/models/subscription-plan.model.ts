@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { Product } from './product.model.js';
 
 export enum SubscriptionFrequency {
   MONTHLY = 'MONTHLY',
@@ -9,6 +10,7 @@ export interface SubscriptionPlan {
   id: string;
   stripePriceId: string;
   productId: string;
+  product?: Product;
   frequency: SubscriptionFrequency;
   currency: string;
   createdAt?: Date;
