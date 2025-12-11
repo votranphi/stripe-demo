@@ -318,8 +318,8 @@ export class OrderService {
 
         orderId = result.id;
 
-        const successUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
-        const cancelUrl = `${process.env.BASE_URL}/api/${version}/orders/checkout/cancel`;
+        const successUrl = `${process.env.FRONTEND_BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl = `${process.env.FRONTEND_BASE_URL}/cancel`;
 
         // Create Stripe Checkout Session via PaymentService
         const { sessionId, url } = await this.paymentService.createCheckoutSession(
@@ -576,6 +576,39 @@ export class OrderService {
       };
     } catch (error) {
       throw new DatabaseException('fetch all orders', error instanceof Error ? error : undefined);
+    }
+  }
+
+  async getOrdersByUserId(userId: string, page: number = 1, limit: number = 10): Promise<{ orders: Order[]; total: number; page: number; totalPages: number }> {
+    try {
+      const skip = (page - 1) * limit;
+      // Filter out DRAFT orders - only return actual orders
+      const query = { 
+        userId, 
+        status: { $ne: OrderStatus.DRAFT } 
+      };
+      const total = await OrderModel.countDocuments(query);
+      const orders = await OrderModel.find(query)
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      return {
+        orders: orders.map(order => ({
+          id: order.id,
+          lineItems: order.lineItems,
+          status: order.status,
+          userId: order.userId,
+          totalAmount: order.totalAmount,
+          stripePaymentIntentId: order.stripePaymentIntentId,
+          stripeSessionId: order.stripeSessionId
+        })),
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+      };
+    } catch (error) {
+      throw new DatabaseException('fetch user orders', error instanceof Error ? error : undefined);
     }
   }
 
