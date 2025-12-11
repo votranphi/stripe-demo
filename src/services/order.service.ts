@@ -579,6 +579,39 @@ export class OrderService {
     }
   }
 
+  async getOrdersByUserId(userId: string, page: number = 1, limit: number = 10): Promise<{ orders: Order[]; total: number; page: number; totalPages: number }> {
+    try {
+      const skip = (page - 1) * limit;
+      // Filter out DRAFT orders - only return actual orders
+      const query = { 
+        userId, 
+        status: { $ne: OrderStatus.DRAFT } 
+      };
+      const total = await OrderModel.countDocuments(query);
+      const orders = await OrderModel.find(query)
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      return {
+        orders: orders.map(order => ({
+          id: order.id,
+          lineItems: order.lineItems,
+          status: order.status,
+          userId: order.userId,
+          totalAmount: order.totalAmount,
+          stripePaymentIntentId: order.stripePaymentIntentId,
+          stripeSessionId: order.stripeSessionId
+        })),
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+      };
+    } catch (error) {
+      throw new DatabaseException('fetch user orders', error instanceof Error ? error : undefined);
+    }
+  }
+
   // Processes expired or pending orders that need status updates. This is called by CronService to handle order cleanup
   async processExpiredOrders(): Promise<void> {
     try {

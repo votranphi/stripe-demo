@@ -7,6 +7,9 @@ const router = Router();
 const orderController = new OrderController();
 const authMiddleware = new AuthMiddleware();
 
+// User orders endpoint
+router.get('/', authMiddleware.authenticate, orderController.getMyOrders);
+
 // Cart/Draft endpoints
 router.get('/draft', authMiddleware.authenticate, orderController.getDraft);
 router.post('/draft/items', authMiddleware.authenticate, orderController.addItemToDraft);

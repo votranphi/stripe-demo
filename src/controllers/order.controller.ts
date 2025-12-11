@@ -111,6 +111,30 @@ export class OrderController {
     });
   });
 
+  // GET /api/v1/orders
+  getMyOrders = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new UnauthorizedException();
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    const result = await this.getOrderService().getOrdersByUserId(userId, page, limit);
+    
+    res.status(200).json({
+      success: true,
+      data: result.orders,
+      pagination: {
+        page: result.page,
+        limit: limit,
+        total: result.total,
+        totalPages: result.totalPages
+      }
+    });
+  });
+
   // GET /api/v1/admin/orders
   getAllOrdersByAdmin = ErrorMiddleware.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     // isAdmin middleware should already protect this route
