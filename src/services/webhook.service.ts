@@ -82,11 +82,6 @@ export class WebhookService {
         await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
         break;
 
-      case WebhookEvents.CUSTOMER_UPDATED:
-        await this.upsertWebhookEvent((event.data.object as any).id, event.type, 'pending');
-        await this.handleCustomerUpdated(event.data.object as Stripe.Customer, event.data.previous_attributes as Partial<Stripe.Customer> | undefined);
-        break;
-
       // Add more event handlers as needed
       default:
         // Log unhandled event, do NOT save to DB
@@ -693,75 +688,6 @@ export class WebhookService {
       throw error;
     } finally {
       await dbSession.endSession();
-    }
-  }
-
-  private async handleCustomerUpdated(
-    customer: Stripe.Customer,
-    previousAttributes?: Partial<Stripe.Customer>
-  ): Promise<void> {
-    const customerId = customer.id;
-
-    console.log(`[${WebhookEvents.CUSTOMER_UPDATED}] Processing customer update for ${customerId}`);
-
-    // Check if default_payment_method was updated
-    const paymentMethodUpdated = previousAttributes && (
-      'default_source' in previousAttributes ||
-      'invoice_settings' in previousAttributes
-    );
-
-    if (!paymentMethodUpdated) {
-      console.log(`[${WebhookEvents.CUSTOMER_UPDATED}] Payment method was not updated for customer ${customerId}, skipping payment retry`);
-      await WebhookEventModel.findOneAndUpdate(
-        { stripeId: customerId, eventType: WebhookEvents.CUSTOMER_UPDATED },
-        {
-          status: 'success',
-          processedAt: new Date(),
-          errorMessage: 'Payment method not updated, no action needed'
-        }
-      );
-      return;
-    }
-
-    console.log(`[${WebhookEvents.CUSTOMER_UPDATED}] Payment method was updated for customer ${customerId}, attempting to retry failed payments`);
-
-    try {
-      // Attempt to retry payment for any past_due or unpaid subscriptions
-      const result = await this.paymentService.retrySubscriptionPayment(customerId, WebhookEvents.CUSTOMER_UPDATED);
-
-      if (result.retriedInvoices.length > 0) {
-        console.log(`[${WebhookEvents.CUSTOMER_UPDATED}] Successfully retried ${result.retriedInvoices.length} invoice(s) for customer ${customerId}`);
-      }
-
-      if (result.errors.length > 0) {
-        console.warn(`[${WebhookEvents.CUSTOMER_UPDATED}] ${result.errors.length} invoice(s) failed to retry for customer ${customerId}`);
-      }
-
-      // Update webhook event to success
-      await WebhookEventModel.findOneAndUpdate(
-        { stripeId: customerId, eventType: WebhookEvents.CUSTOMER_UPDATED },
-        {
-          status: 'success',
-          processedAt: new Date(),
-          errorMessage: result.errors.length > 0 ? `Some invoices failed: ${result.errors.join('; ')}` : undefined
-        }
-      );
-
-      console.log(`[${WebhookEvents.CUSTOMER_UPDATED}] Webhook event updated to success for customer ${customerId}`);
-    } catch (error) {
-      console.error(`[${WebhookEvents.CUSTOMER_UPDATED}] Error handling customer update:`, error);
-
-      // Update webhook event to failed
-      await WebhookEventModel.findOneAndUpdate(
-        { stripeId: customerId, eventType: WebhookEvents.CUSTOMER_UPDATED },
-        {
-          status: 'failed',
-          processedAt: new Date(),
-          errorMessage: error instanceof Error ? error.message : 'Unknown error'
-        }
-      );
-
-      throw error;
     }
   }
 
