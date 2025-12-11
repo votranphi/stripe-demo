@@ -1,4 +1,5 @@
 import { SubscriptionPlan, SubscriptionPlanModel } from '../models/subscription-plan.model.js';
+import { ProductModel } from '../models/product.model.js';
 import {
   DatabaseException,
 } from '../errors/CustomError.js';
@@ -13,11 +14,16 @@ export class SubscriptionPlanService {
         .limit(limit)
         .sort({ createdAt: -1 });
       
+      const productIds = plans.map(p => p.productId);
+      const products = await ProductModel.find({ id: { $in: productIds } });
+      const productMap = new Map(products.map(p => [p.id, p]));
+
       return {
         plans: plans.map(plan => ({
           id: plan.id,
           stripePriceId: plan.stripePriceId,
           productId: plan.productId,
+          product: productMap.get(plan.productId),
           frequency: plan.frequency,
           currency: plan.currency,
           createdAt: plan.createdAt
@@ -37,10 +43,14 @@ export class SubscriptionPlanService {
       if (!plan) {
         return null;
       }
+      
+      const product = await ProductModel.findOne({ id: plan.productId });
+
       return {
         id: plan.id,
         stripePriceId: plan.stripePriceId,
         productId: plan.productId,
+        product: product || undefined,
         frequency: plan.frequency,
         currency: plan.currency,
         createdAt: plan.createdAt

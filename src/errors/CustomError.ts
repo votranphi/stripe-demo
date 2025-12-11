@@ -22,12 +22,6 @@ export class WebhookSignatureException extends CustomError {
   }
 }
 
-export class MissingSessionIdException extends CustomError {
-  constructor() {
-    super('Missing session_id in query parameters', 400);
-  }
-}
-
 export class InvalidProductTypeException extends CustomError {
   constructor() {
     super('Subscription products cannot be added to the shopping cart. Please use the subscription checkout flow.', 400);

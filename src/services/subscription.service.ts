@@ -50,8 +50,8 @@ export class SubscriptionService {
       const customerId = await this.paymentService.getOrCreateCustomer(userId, user.email);
 
       // Create success and cancel URLs
-      const successUrl = `${process.env.BASE_URL}/api/v1/subscriptions/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${process.env.BASE_URL}/api/v1/subscriptions/checkout/cancel`;
+      const successUrl = `${process.env.FRONTEND_BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${process.env.FRONTEND_BASE_URL}/cancel`;
 
       // Create subscription checkout session
       const { sessionId, url } = await this.paymentService.createSubscriptionCheckoutSession(
@@ -166,24 +166,6 @@ export class SubscriptionService {
       throw new DatabaseException(
         'cancel subscription',
         error instanceof Error ? error : undefined
-      );
-    }
-  }
-
-  // Retrieve checkout session details from Stripe
-  async retrieveCheckoutSession(sessionId: string): Promise<{ session: any }> {
-    try {
-      const session = await this.paymentService.retrieveCheckoutSession(sessionId);
-
-      return {
-        session: session
-      };
-    } catch (error) {
-      if (error instanceof CheckoutSessionException) {
-        throw error;
-      }
-      throw new CheckoutSessionException(
-        error instanceof Error ? error.message : 'Failed to retrieve session'
       );
     }
   }
